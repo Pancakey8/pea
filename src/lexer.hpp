@@ -85,3 +85,5 @@ private:
   std::expected<Token, std::string> read_ident_or_keyword();
   std::expected<Token, std::string> read_operator();
 };
+
+std::ostream& operator<<(std::ostream& os, const Token& token);

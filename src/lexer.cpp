@@ -7,13 +7,8 @@
 Lexer::Lexer(std::string_view src) : source(src) {}
 
 void Lexer::skip_whitespace() {
-  while (pos < source.size() && std::isspace(source[pos])) {
-    if (source[pos] == '\n') {
-      line++;
-      col = 1;
-    } else {
-      col++;
-    }
+  while (pos < source.size() && std::isspace(source[pos]) && source[pos] != '\n') {
+    col++;
     pos++;
   }
 }
