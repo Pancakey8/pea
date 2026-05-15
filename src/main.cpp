@@ -1,5 +1,6 @@
 #include "lexer.hpp"
 #include "parser.hpp"
+#include "ast.hpp"
 #include <fstream>
 #include <iostream>
 #include <print>
@@ -31,4 +32,6 @@ int main() {
                  prog.error().message);
     return 1;
   }
+
+  std::println("AST:\n{}", *prog);
 }

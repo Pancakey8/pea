@@ -4,6 +4,7 @@
 #include <string>
 #include <variant>
 #include <vector>
+#include <ostream>
 
 struct Expr;
 using ExprPtr = std::unique_ptr<Expr>;
@@ -85,3 +86,7 @@ struct Stmt {
 struct Program {
   std::vector<StmtPtr> statements;
 };
+
+std::ostream& operator<<(std::ostream& os, const Program& prog);
+std::ostream& operator<<(std::ostream& os, const Stmt& stmt);
+std::ostream& operator<<(std::ostream& os, const Expr& expr);
