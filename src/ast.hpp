@@ -1,41 +1,84 @@
 #pragma once
 #include "lexer.hpp"
-#include <variant>
-#include <vector>
 #include <memory>
 #include <string>
+#include <variant>
+#include <vector>
 
 struct Expr;
 using ExprPtr = std::unique_ptr<Expr>;
 
-struct Literal { std::variant<double, std::string, char> value; };
-struct Variable { std::string name; };
-struct BinaryOp { TokenType op; ExprPtr left; ExprPtr right; };
-struct UnaryOp { TokenType op; ExprPtr operand; };
-struct Call { ExprPtr callee; std::vector<ExprPtr> args; };
+struct Literal {
+  std::variant<double, std::string, char> value;
+};
+struct Variable {
+  std::string name;
+};
+struct BinaryOp {
+  TokenType op;
+  ExprPtr left;
+  ExprPtr right;
+};
+struct UnaryOp {
+  TokenType op;
+  ExprPtr operand;
+};
+struct Call {
+  ExprPtr callee;
+  std::vector<ExprPtr> args;
+};
 
 struct Expr {
-    std::variant<Literal, Variable, BinaryOp, UnaryOp, Call> data;
-    Expr(auto&& val) : data(std::forward<decltype(val)>(val)) {}
+  std::variant<Literal, Variable, BinaryOp, UnaryOp, Call> data;
+  Expr(auto &&val) : data(std::forward<decltype(val)>(val)) {}
 };
 
 struct Stmt;
 using StmtPtr = std::unique_ptr<Stmt>;
 
-struct DimStmt { std::string name; std::string type; ExprPtr init; };
-struct LetStmt { std::string name; ExprPtr value; };
-struct IfStmt { ExprPtr condition; std::vector<StmtPtr> then_branch; std::vector<StmtPtr> else_branch; };
-struct ForStmt { std::string var; ExprPtr start; ExprPtr end; ExprPtr step; std::vector<StmtPtr> body; };
-struct GotoStmt { std::string label; };
-struct DoStmt { std::vector<StmtPtr> body; ExprPtr condition; bool while_at_start; };
-struct ExprStmt { ExprPtr expr; };
-struct LabelStmt { std::string name; };
+struct DimStmt {
+  std::string name;
+  std::string type;
+  ExprPtr init;
+};
+struct LetStmt {
+  std::string name;
+  ExprPtr value;
+};
+struct IfStmt {
+  ExprPtr condition;
+  std::vector<StmtPtr> then_branch;
+  std::vector<StmtPtr> else_branch;
+};
+struct ForStmt {
+  std::string var;
+  ExprPtr start;
+  ExprPtr end;
+  ExprPtr step;
+  std::vector<StmtPtr> body;
+};
+struct GotoStmt {
+  std::string label;
+};
+struct DoStmt {
+  std::vector<StmtPtr> body;
+  ExprPtr condition;
+  bool while_at_start;
+};
+struct ExprStmt {
+  ExprPtr expr;
+};
+struct LabelStmt {
+  std::string name;
+};
 
 struct Stmt {
-    std::variant<DimStmt, LetStmt, IfStmt, ForStmt, GotoStmt, DoStmt, ExprStmt, LabelStmt> data;
-    Stmt(auto&& val) : data(std::forward<decltype(val)>(val)) {}
+  std::variant<DimStmt, LetStmt, IfStmt, ForStmt, GotoStmt, DoStmt, ExprStmt,
+               LabelStmt>
+      data;
+  Stmt(auto &&val) : data(std::forward<decltype(val)>(val)) {}
 };
 
 struct Program {
-    std::vector<StmtPtr> statements;
+  std::vector<StmtPtr> statements;
 };
