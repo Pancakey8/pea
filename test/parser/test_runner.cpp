@@ -1,6 +1,7 @@
 #include "parser.hpp"
 #include "lexer.hpp"
 #include "ast.hpp"
+#include <print>
 #include <iostream>
 #include <fstream>
 #include <string>
