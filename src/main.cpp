@@ -33,5 +33,5 @@ int main() {
     return 1;
   }
 
-  std::println("AST:\n{}", *prog);
+  std::cout << *prog;
 }
