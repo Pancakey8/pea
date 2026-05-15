@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 4.0)
 project(pea)
 
 set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 add_library(pea-lexer src/lexer.cpp)
 target_include_directories(pea-lexer PUBLIC src/)
