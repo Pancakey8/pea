@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cctype>
 #include <unordered_map>
+#include <ostream>
 
 Lexer::Lexer(std::string_view src) : source(src) {}
 
@@ -232,4 +233,59 @@ std::expected<Token, std::string> Lexer::read_operator() {
     return Token{TokenType::Great, ">", 0, 0, line, start_col};
   }
   return std::unexpected(std::string("Unexpected character: ") + c);
+}
+
+std::string to_string(TokenType type) {
+  switch (type) {
+    case TokenType::Number: return "Number";
+    case TokenType::String: return "String";
+    case TokenType::Char: return "Char";
+    case TokenType::Ident: return "Ident";
+    case TokenType::KW_Dim: return "KW_Dim";
+    case TokenType::KW_Let: return "KW_Let";
+    case TokenType::KW_If: return "KW_If";
+    case TokenType::KW_Then: return "KW_Then";
+    case TokenType::KW_Else: return "KW_Else";
+    case TokenType::KW_EndIf: return "KW_EndIf";
+    case TokenType::KW_For: return "KW_For";
+    case TokenType::KW_To: return "KW_To";
+    case TokenType::KW_Step: return "KW_Step";
+    case TokenType::KW_EndFor: return "KW_EndFor";
+    case TokenType::KW_While: return "KW_While";
+    case TokenType::KW_Do: return "KW_Do";
+    case TokenType::KW_Loop: return "KW_Loop";
+    case TokenType::KW_Goto: return "KW_Goto";
+    case TokenType::KW_End: return "KW_End";
+    case TokenType::KW_As: return "KW_As";
+    case TokenType::KW_Mod: return "KW_Mod";
+    case TokenType::KW_And: return "KW_And";
+    case TokenType::KW_Or: return "KW_Or";
+    case TokenType::KW_Not: return "KW_Not";
+    case TokenType::Plus: return "Plus";
+    case TokenType::Minus: return "Minus";
+    case TokenType::Star: return "Star";
+    case TokenType::Slash: return "Slash";
+    case TokenType::Caret: return "Caret";
+    case TokenType::Backslash: return "Backslash";
+    case TokenType::Eq: return "Eq";
+    case TokenType::Neq: return "Neq";
+    case TokenType::Less: return "Less";
+    case TokenType::Great: return "Great";
+    case TokenType::Lteq: return "Lteq";
+    case TokenType::Gteq: return "Gteq";
+    case TokenType::Amp: return "Amp";
+    case TokenType::LParen: return "LParen";
+    case TokenType::RParen: return "RParen";
+    case TokenType::Comma: return "Comma";
+    case TokenType::Colon: return "Colon";
+    case TokenType::EOL: return "EOL";
+    case TokenType::EndOfFile: return "EndOfFile";
+    default: return "Unknown";
+  }
+}
+
+std::ostream& operator<<(std::ostream& os, const Token& token) {
+  os << "Token{" << to_string(token.type) << ", text=\"" << token.text 
+     << "\", line=" << token.line << ", col=" << token.col << "}";
+  return os;
 }

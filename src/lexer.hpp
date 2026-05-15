@@ -3,6 +3,7 @@
 #include <string>
 #include <string_view>
 #include <vector>
+#include <ostream>
 
 enum class TokenType {
   // Literals
@@ -62,6 +63,9 @@ struct Token {
   int line = 1;
   int col = 1;
 };
+
+std::string to_string(TokenType type);
+std::ostream& operator<<(std::ostream& os, const Token& token);
 
 class Lexer {
 public:
