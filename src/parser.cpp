@@ -47,7 +47,7 @@ int Parser::get_precedence(TokenType type) {
   }
 }
 
-std::expected<ExprPtr, std::string> Parser::parse_prefix() {
+std::expected<ExprPtr, Error> Parser::parse_prefix() {
   if (current.type == TokenType::Number) {
     auto val = current.number;
     advance();
@@ -72,9 +72,9 @@ std::expected<ExprPtr, std::string> Parser::parse_prefix() {
     advance();
     auto expr = parse_expression();
     if (!expr)
-      return std::unexpected("Expected expression");
+      return std::unexpected(expr.error());
     if (!consume(TokenType::RParen))
-      return std::unexpected("Expected ')'");
+      return std::unexpected(Error{"Expected ')'", current.line, current.col});
     return expr;
   }
   if (current.type == TokenType::KW_Not) {
@@ -82,7 +82,7 @@ std::expected<ExprPtr, std::string> Parser::parse_prefix() {
     advance();
     auto operand = parse_expression(2);
     if (!operand)
-      return std::unexpected("Expected operand");
+      return std::unexpected(operand.error());
     return std::make_unique<Expr>(UnaryOp{op, std::move(*operand)});
   }
   if (current.type == TokenType::Plus || current.type == TokenType::Minus) {
@@ -90,13 +90,13 @@ std::expected<ExprPtr, std::string> Parser::parse_prefix() {
     advance();
     auto operand = parse_expression(35);
     if (!operand)
-      return std::unexpected("Expected operand");
+      return std::unexpected(operand.error());
     return std::make_unique<Expr>(UnaryOp{op, std::move(*operand)});
   }
-  return std::unexpected("Unexpected token in expression");
+  return std::unexpected(Error{"Unexpected token in expression", current.line, current.col});
 }
 
-std::expected<ExprPtr, std::string> Parser::parse_infix(ExprPtr left) {
+std::expected<ExprPtr, Error> Parser::parse_infix(ExprPtr left) {
   if (current.type == TokenType::LParen) {
     advance();
     std::vector<ExprPtr> args;
@@ -104,7 +104,7 @@ std::expected<ExprPtr, std::string> Parser::parse_infix(ExprPtr left) {
       do {
         auto arg = parse_expression();
         if (!arg)
-          return std::unexpected("Invalid argument");
+          return std::unexpected(arg.error());
         args.push_back(std::move(*arg));
         if (current.type == TokenType::Comma)
           advance();
@@ -113,7 +113,7 @@ std::expected<ExprPtr, std::string> Parser::parse_infix(ExprPtr left) {
       } while (true);
     }
     if (!consume(TokenType::RParen))
-      return std::unexpected("Expected ')' after arguments");
+      return std::unexpected(Error{"Expected ')' after arguments", current.line, current.col});
     return std::make_unique<Expr>(Call{std::move(left), std::move(args)});
   }
 
@@ -131,7 +131,7 @@ std::expected<ExprPtr, std::string> Parser::parse_infix(ExprPtr left) {
       BinaryOp{op, std::move(left), std::move(*right)});
 }
 
-std::expected<ExprPtr, std::string> Parser::parse_expression(int precedence) {
+std::expected<ExprPtr, Error> Parser::parse_expression(int precedence) {
   auto left = parse_prefix();
   if (!left)
     return left;
@@ -144,7 +144,7 @@ std::expected<ExprPtr, std::string> Parser::parse_expression(int precedence) {
   return left;
 }
 
-std::expected<StmtPtr, std::string> Parser::parse_statement() {
+std::expected<StmtPtr, Error> Parser::parse_statement() {
   std::string label;
   if (current.type == TokenType::Ident) {
     // Peek for colon
@@ -181,63 +181,63 @@ std::expected<StmtPtr, std::string> Parser::parse_statement() {
   // Expression statement
   auto expr = parse_expression();
   if (!expr)
-    return std::unexpected("Expected expression");
+    return std::unexpected(expr.error());
   if (!consume(TokenType::EOL))
-    return std::unexpected("Expected EOL");
+    return std::unexpected(Error{"Expected EOL", current.line, current.col});
   return std::make_unique<Stmt>(ExprStmt{std::move(*expr)});
 }
 
-std::expected<StmtPtr, std::string> Parser::parse_dim() {
+std::expected<StmtPtr, Error> Parser::parse_dim() {
   advance(); // dim
   std::string name = current.text;
   if (!consume(TokenType::Ident))
-    return std::unexpected("Expected identifier");
+    return std::unexpected(Error{"Expected identifier", current.line, current.col});
   if (!consume(TokenType::KW_As))
-    return std::unexpected("Expected 'as'");
+    return std::unexpected(Error{"Expected 'as'", current.line, current.col});
   std::string type = current.text;
   if (!consume(TokenType::Ident))
-    return std::unexpected("Expected type");
+    return std::unexpected(Error{"Expected type", current.line, current.col});
   ExprPtr init = nullptr;
   if (current.type == TokenType::Eq) {
     advance();
     auto e = parse_expression();
     if (!e)
-      return std::unexpected("Invalid init expression");
+      return std::unexpected(e.error());
     init = std::move(*e);
   }
   if (!consume(TokenType::EOL))
-    return std::unexpected("Expected EOL");
+    return std::unexpected(Error{"Expected EOL", current.line, current.col});
   return std::make_unique<Stmt>(DimStmt{name, type, std::move(init)});
 }
 
-std::expected<StmtPtr, std::string> Parser::parse_let() {
+std::expected<StmtPtr, Error> Parser::parse_let() {
   advance(); // let
   std::string name = current.text;
   if (!consume(TokenType::Ident))
-    return std::unexpected("Expected identifier");
+    return std::unexpected(Error{"Expected identifier", current.line, current.col});
   if (!consume(TokenType::Eq))
-    return std::unexpected("Expected '='");
+    return std::unexpected(Error{"Expected '='", current.line, current.col});
   auto val = parse_expression();
   if (!val)
-    return std::unexpected("Expected expression");
+    return std::unexpected(val.error());
   if (!consume(TokenType::EOL))
-    return std::unexpected("Expected EOL");
+    return std::unexpected(Error{"Expected EOL", current.line, current.col});
   return std::make_unique<Stmt>(LetStmt{name, std::move(*val)});
 }
 
-std::expected<StmtPtr, std::string> Parser::parse_if() {
+std::expected<StmtPtr, Error> Parser::parse_if() {
   advance(); // if
   auto cond = parse_expression();
   if (!cond)
-    return std::unexpected("Expected condition");
+    return std::unexpected(cond.error());
   if (!consume(TokenType::KW_Then))
-    return std::unexpected("Expected 'then'");
+    return std::unexpected(Error{"Expected 'then'", current.line, current.col});
   if (!consume(TokenType::EOL))
-    return std::unexpected("Expected EOL");
+    return std::unexpected(Error{"Expected EOL", current.line, current.col});
 
   auto then_branch = parse_statements(TokenType::KW_Else);
   if (!then_branch)
-    return std::unexpected("Invalid then branch");
+    return std::unexpected(then_branch.error());
 
   std::vector<StmtPtr> else_branch;
   while (current.type == TokenType::KW_Else) {
@@ -245,68 +245,68 @@ std::expected<StmtPtr, std::string> Parser::parse_if() {
     if (current.type == TokenType::KW_If) {
       auto nested_if = parse_if();
       if (!nested_if)
-        return std::unexpected("Invalid else if");
+        return std::unexpected(nested_if.error());
       else_branch.push_back(std::move(*nested_if));
     } else {
       auto stmts = parse_statements(TokenType::KW_EndIf);
       if (!stmts)
-        return std::unexpected("Invalid else branch");
+        return std::unexpected(stmts.error());
       for (auto &s : *stmts)
         else_branch.push_back(std::move(s));
     }
   }
   if (!consume(TokenType::KW_EndIf))
-    return std::unexpected("Expected 'end if'");
+    return std::unexpected(Error{"Expected 'end if'", current.line, current.col});
   return std::make_unique<Stmt>(IfStmt{
       std::move(*cond), std::move(*then_branch), std::move(else_branch)});
 }
 
-std::expected<StmtPtr, std::string> Parser::parse_for() {
+std::expected<StmtPtr, Error> Parser::parse_for() {
   advance(); // for
   std::string var = current.text;
   if (!consume(TokenType::Ident))
-    return std::unexpected("Expected identifier");
+    return std::unexpected(Error{"Expected identifier", current.line, current.col});
   if (!consume(TokenType::Eq))
-    return std::unexpected("Expected '='");
+    return std::unexpected(Error{"Expected '='", current.line, current.col});
   auto start = parse_expression();
   if (!start)
-    return std::unexpected("Expected start value");
+    return std::unexpected(start.error());
   if (!consume(TokenType::KW_To))
-    return std::unexpected("Expected 'to'");
+    return std::unexpected(Error{"Expected 'to'", current.line, current.col});
   auto end = parse_expression();
   if (!end)
-    return std::unexpected("Expected end value");
+    return std::unexpected(end.error());
   ExprPtr step = nullptr;
   if (current.type == TokenType::KW_Step) {
     advance();
     if (auto step_parse = parse_expression()) {
       step = std::move(*step_parse);
     } else {
-      return std::unexpected("Invalid step");
+      return std::unexpected(step_parse.error());
     }
   }
   if (!consume(TokenType::EOL))
-    return std::unexpected("Expected EOL");
+    return std::unexpected(Error{"Expected EOL", current.line, current.col});
   auto body = parse_statements(TokenType::KW_EndFor);
   if (!body)
-    return std::unexpected("Invalid for body");
+    return std::unexpected(body.error());
   if (!consume(TokenType::KW_EndFor))
-    return std::unexpected("Expected 'end for'");
+    return std::unexpected(Error{"Expected 'end for'", current.line, current.col});
   return std::make_unique<Stmt>(ForStmt{var, std::move(*start), std::move(*end),
                                         std::move(step), std::move(*body)});
 }
 
-std::expected<StmtPtr, std::string> Parser::parse_goto() {
+std::expected<StmtPtr, Error> Parser::parse_goto() {
   advance(); // goto
   std::string label = current.text;
   if (!consume(TokenType::Ident))
-    return std::unexpected("Expected label");
+    return std::unexpected(Error{"Expected label", current.line, current.col});
   if (!consume(TokenType::EOL))
-    return std::unexpected("Expected EOL");
+    return std::unexpected(Error{"Expected EOL", current.line, current.col});
   return std::make_unique<Stmt>(GotoStmt{label});
 }
 
-std::expected<StmtPtr, std::string> Parser::parse_do() {
+std::expected<StmtPtr, Error> Parser::parse_do() {
   advance(); // do
   bool while_at_start = (current.type == TokenType::KW_While);
   std::vector<StmtPtr> body;
@@ -317,30 +317,36 @@ std::expected<StmtPtr, std::string> Parser::parse_do() {
     if (auto cond_parse = parse_expression(); cond_parse) {
       cond = std::move(*cond_parse);
     } else
-      return std::unexpected("Invalid while condition");
+      return std::unexpected(cond_parse.error());
     if (!consume(TokenType::EOL))
-      return std::unexpected("Expected EOL");
-    body = *parse_statements(TokenType::KW_Loop);
+      return std::unexpected(Error{"Expected EOL", current.line, current.col});
+    auto body_parse = parse_statements(TokenType::KW_Loop);
+    if (!body_parse)
+      return std::unexpected(body_parse.error());
+    body = std::move(*body_parse);
     if (!consume(TokenType::KW_Loop))
-      return std::unexpected("Expected 'loop'");
+      return std::unexpected(Error{"Expected 'loop'", current.line, current.col});
   } else {
-    body = *parse_statements(TokenType::KW_Loop);
+    auto body_parse = parse_statements(TokenType::KW_Loop);
+    if (!body_parse)
+      return std::unexpected(body_parse.error());
+    body = std::move(*body_parse);
     if (!consume(TokenType::KW_Loop))
-      return std::unexpected("Expected 'loop'");
+      return std::unexpected(Error{"Expected 'loop'", current.line, current.col});
     if (!consume(TokenType::KW_While))
-      return std::unexpected("Expected 'while'");
+      return std::unexpected(Error{"Expected 'while'", current.line, current.col});
     if (auto cond_parse = parse_expression(); cond_parse) {
       cond = std::move(*cond_parse);
     } else
-      return std::unexpected("Invalid while condition");
+      return std::unexpected(cond_parse.error());
   }
   if (!consume(TokenType::EOL))
-    return std::unexpected("Expected EOL");
+    return std::unexpected(Error{"Expected EOL", current.line, current.col});
   return std::make_unique<Stmt>(
       DoStmt{std::move(body), std::move(cond), while_at_start});
 }
 
-std::expected<std::vector<StmtPtr>, std::string>
+std::expected<std::vector<StmtPtr>, Error>
 Parser::parse_statements(TokenType stop_token) {
   std::vector<StmtPtr> stmts;
   while (current.type != stop_token && current.type != TokenType::EndOfFile) {
@@ -352,7 +358,7 @@ Parser::parse_statements(TokenType stop_token) {
   return stmts;
 }
 
-std::expected<Program, std::string> Parser::parse() {
+std::expected<Program, Error> Parser::parse() {
   auto stmts = parse_statements();
   if (!stmts)
     return std::unexpected(stmts.error());

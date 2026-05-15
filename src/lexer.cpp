@@ -13,7 +13,7 @@ void Lexer::skip_whitespace() {
   }
 }
 
-std::expected<Token, std::string> Lexer::next_token() {
+std::expected<Token, Error> Lexer::next_token() {
   skip_whitespace();
   if (pos >= source.size())
     return Token{TokenType::EndOfFile, "", 0, 0, line, col};
@@ -41,7 +41,7 @@ std::expected<Token, std::string> Lexer::next_token() {
   return read_operator();
 }
 
-std::expected<Token, std::string> Lexer::read_number() {
+std::expected<Token, Error> Lexer::read_number() {
   size_t start = pos;
   int start_col = col;
   if (source[pos] == '+' || source[pos] == '-') {
@@ -64,7 +64,7 @@ std::expected<Token, std::string> Lexer::read_number() {
   return Token{TokenType::Number, text, std::stod(text), 0, line, start_col};
 }
 
-std::expected<Token, std::string> Lexer::read_string() {
+std::expected<Token, Error> Lexer::read_string() {
   int start_col = col;
   pos++;
   col++; // skip "
@@ -74,7 +74,7 @@ std::expected<Token, std::string> Lexer::read_string() {
       pos++;
       col++;
       if (pos >= source.size())
-        return std::unexpected("Unterminated string escape");
+        return std::unexpected(Error{"Unterminated string escape", line, col});
       char esc = source[pos];
       if (esc == 'n')
         result += '\n';
@@ -91,13 +91,13 @@ std::expected<Token, std::string> Lexer::read_string() {
     col++;
   }
   if (pos >= source.size())
-    return std::unexpected("Unterminated string");
+    return std::unexpected(Error{"Unterminated string", line, col});
   pos++;
   col++; // skip "
   return Token{TokenType::String, result, 0, 0, line, start_col};
 }
 
-std::expected<Token, std::string> Lexer::read_char() {
+std::expected<Token, Error> Lexer::read_char() {
   int start_col = col;
   pos++;
   col++; // skip '
@@ -106,7 +106,7 @@ std::expected<Token, std::string> Lexer::read_char() {
     pos++;
     col++;
     if (pos >= source.size())
-      return std::unexpected("Unterminated char escape");
+      return std::unexpected(Error{"Unterminated char escape", line, col});
     char esc = source[pos];
     if (esc == 'n')
       result = '\n';
@@ -119,18 +119,18 @@ std::expected<Token, std::string> Lexer::read_char() {
   } else if (pos < source.size()) {
     result = source[pos];
   } else
-    return std::unexpected("Unterminated char");
+    return std::unexpected(Error{"Unterminated char", line, col});
   pos++;
   col++;
   if (pos >= source.size() || source[pos] != '\'')
-    return std::unexpected("Missing closing quote for char");
+    return std::unexpected(Error{"Missing closing quote for char", line, col});
   pos++;
   col++;
   return Token{TokenType::Char, std::string(1, result), 0, result, line,
                start_col};
 }
 
-std::expected<Token, std::string> Lexer::read_ident_or_keyword() {
+std::expected<Token, Error> Lexer::read_ident_or_keyword() {
   size_t start = pos;
   int start_col = col;
   while (pos < source.size() &&
@@ -177,7 +177,7 @@ std::expected<Token, std::string> Lexer::read_ident_or_keyword() {
   return Token{TokenType::Ident, text, 0, 0, line, start_col};
 }
 
-std::expected<Token, std::string> Lexer::read_operator() {
+std::expected<Token, Error> Lexer::read_operator() {
   int start_col = col;
   char c = source[pos];
   pos++;
@@ -227,7 +227,7 @@ std::expected<Token, std::string> Lexer::read_operator() {
     }
     return Token{TokenType::Great, ">", 0, 0, line, start_col};
   }
-  return std::unexpected(std::string("Unexpected character: ") + c);
+  return std::unexpected(Error{"Unexpected character: " + std::string(1, c), line, start_col});
 }
 
 std::string to_string(TokenType type) {

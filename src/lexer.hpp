@@ -5,6 +5,12 @@
 #include <vector>
 #include <ostream>
 
+struct Error {
+  std::string message;
+  int line;
+  int col;
+};
+
 enum class TokenType {
   // Literals
   Number,
@@ -70,7 +76,7 @@ std::ostream& operator<<(std::ostream& os, const Token& token);
 class Lexer {
 public:
   explicit Lexer(std::string_view source);
-  std::expected<Token, std::string> next_token();
+  std::expected<Token, Error> next_token();
 
 private:
   std::string_view source;
@@ -79,11 +85,11 @@ private:
   int col = 1;
 
   void skip_whitespace();
-  std::expected<Token, std::string> read_number();
-  std::expected<Token, std::string> read_string();
-  std::expected<Token, std::string> read_char();
-  std::expected<Token, std::string> read_ident_or_keyword();
-  std::expected<Token, std::string> read_operator();
+  std::expected<Token, Error> read_number();
+  std::expected<Token, Error> read_string();
+  std::expected<Token, Error> read_char();
+  std::expected<Token, Error> read_ident_or_keyword();
+  std::expected<Token, Error> read_operator();
 };
 
 std::ostream& operator<<(std::ostream& os, const Token& token);
