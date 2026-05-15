@@ -1,0 +1,1 @@
+{"statements":[{"type":"ExprStmt","expr":{"type":"BinaryOp","op":"Plus","left":{"type":"Literal","value":1},"right":{"type":"BinaryOp","op":"Star","left":{"type":"Literal","value":2},"right":{"type":"Literal","value":3}}}}]}

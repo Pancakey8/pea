@@ -1,0 +1,1 @@
+{"statements":[{"type":"ExprStmt","expr":{"type":"Call","callee":{"type":"Variable","name":"print"},"args":[{"type":"Literal","value":1},{"type":"Literal","value":"hi"},{"type":"Variable","name":"x"}]}}]}

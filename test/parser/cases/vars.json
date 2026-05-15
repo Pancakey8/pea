@@ -1,0 +1,1 @@
+{"statements":[{"type":"DimStmt","name":"x","type":"int","init":{"type":"Literal","value":10}},{"type":"LetStmt","name":"x","value":{"type":"Literal","value":20}}]}

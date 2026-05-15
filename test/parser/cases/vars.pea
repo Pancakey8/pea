@@ -1,0 +1,2 @@
+dim x as int = 10
+let x = 20
