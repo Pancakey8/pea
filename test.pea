@@ -1,16 +1,18 @@
 -3.5
 5.5
+'a'
+"hey"
 
 DiM foo AS Integer = 10 - 5
 
 leT foo = 80
 
 if x = 3 then
-  print("Hello")
+  foo(1)
 else if x < 5 then
-  print("Hi")
+  bar(2)
 else
-  print("Bar")
+  baz(3)
 end IF
 
 do while x <> 10

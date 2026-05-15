@@ -139,9 +139,13 @@ std::expected<Token, Error> Lexer::read_ident_or_keyword() {
     col++;
   }
   std::string text{source.substr(start, pos - start)};
-  std::string lower = text;
-  std::transform(lower.begin(), lower.end(), lower.begin(),
+  auto to_lower = [](std::string_view str) {
+    std::string lower{str};
+    std::transform(lower.begin(), lower.end(), lower.begin(),
                  [](unsigned char c) { return std::tolower(c); });
+    return lower;
+  };
+  std::string lower = to_lower(text);
 
   static const std::unordered_map<std::string, TokenType> keywords = {
       {"dim", TokenType::KW_Dim},     {"let", TokenType::KW_Let},
@@ -160,11 +164,11 @@ std::expected<Token, Error> Lexer::read_ident_or_keyword() {
       size_t save_pos = pos;
       int save_col = col;
       skip_whitespace();
-      if (pos + 2 <= source.size() && source.substr(pos, 2) == "if") {
+      if (pos + 2 <= source.size() && to_lower(source.substr(pos, 2)) == "if") {
         pos += 2;
         col += 2;
         return Token{TokenType::KW_EndIf, "end if", 0, 0, line, start_col};
-      } else if (pos + 3 <= source.size() && source.substr(pos, 3) == "for") {
+      } else if (pos + 3 <= source.size() && to_lower(source.substr(pos, 3)) == "for") {
         pos += 3;
         col += 3;
         return Token{TokenType::KW_EndFor, "end for", 0, 0, line, start_col};

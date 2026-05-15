@@ -1,4 +1,5 @@
 #include "parser.hpp"
+#include "lexer.hpp"
 
 Parser::Parser(Lexer &l) : lexer(l) { advance(); }
 
@@ -267,6 +268,9 @@ std::expected<ElseBranch, Error> Parser::parse_else_branch() {
       return std::make_unique<Stmt>(IfStmt{
           std::move(*cond), std::move(*then_branch), std::move(*else_branch)});
     } else {
+      if (!consume(TokenType::EOL))
+        return std::unexpected(Error{"Expected EOL", current.line, current.col});
+      while (consume(TokenType::EOL)) ;
       auto else_stmts = parse_statements({TokenType::KW_EndIf});
       if (!else_stmts)
         return std::unexpected(else_stmts.error());
@@ -372,6 +376,7 @@ std::expected<StmtPtr, Error> Parser::parse_do() {
 
 std::expected<std::vector<StmtPtr>, Error>
 Parser::parse_statements(std::vector<TokenType> stop_tokens) {
+  while (consume(TokenType::EOL)) ;
   std::vector<StmtPtr> stmts;
   while (true) {
     bool stop = false;
