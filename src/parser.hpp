@@ -2,6 +2,7 @@
 #include "ast.hpp"
 #include "lexer.hpp"
 #include <expected>
+#include <optional>
 
 class Parser {
 public:
@@ -11,8 +12,10 @@ public:
 private:
   Lexer &lexer;
   Token current;
+  std::optional<Token> peeked_token;
 
   void advance();
+  Token peek();
   bool consume(TokenType type);
 
   std::expected<ExprPtr, Error> parse_expression(int precedence = 0);

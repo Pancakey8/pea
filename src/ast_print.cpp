@@ -2,6 +2,21 @@
 #include "lexer.hpp"
 #include <ostream>
 #include <variant>
+#include <string>
+
+// Helper to escape JSON strings
+static std::string escape_json_string(const std::string& s) {
+  std::string result;
+  for (char c : s) {
+    if (c == '"') result += "\\\"";
+    else if (c == '\\') result += "\\\\";
+    else if (c == '\n') result += "\\n";
+    else if (c == '\r') result += "\\r";
+    else if (c == '\t') result += "\\t";
+    else result += c;
+  }
+  return result;
+}
 
 // Helper to print JSON strings
 static std::ostream& op_json_str(std::ostream& os, const std::string& s) {
@@ -22,7 +37,7 @@ struct ExprPrinter {
       if constexpr (std::is_same_v<T, double>) {
         os << val;
       } else if constexpr (std::is_same_v<T, std::string>) {
-        op_json_str(os, val);
+        op_json_str(os, escape_json_string(val));
       } else if constexpr (std::is_same_v<T, char>) {
         os << "\"";
         os << val;

@@ -4,11 +4,26 @@
 Parser::Parser(Lexer &l) : lexer(l) { advance(); }
 
 void Parser::advance() {
+  if (peeked_token) {
+    current = *peeked_token;
+    peeked_token = std::nullopt;
+  } else {
+    auto next = lexer.next_token();
+    if (next)
+      current = *next;
+    else
+      current = Token{TokenType::EndOfFile, ""};
+  }
+}
+
+Token Parser::peek() {
+  if (peeked_token) return *peeked_token;
   auto next = lexer.next_token();
-  if (next)
-    current = *next;
-  else
-    current = Token{TokenType::EndOfFile, ""};
+  if (next) {
+    peeked_token = *next;
+    return *next;
+  }
+  return Token{TokenType::EndOfFile, ""};
 }
 
 bool Parser::consume(TokenType type) {
@@ -148,6 +163,12 @@ std::expected<ExprPtr, Error> Parser::parse_expression(int precedence) {
 }
 
 std::expected<StmtPtr, Error> Parser::parse_statement() {
+  if (current.type == TokenType::Ident && peek().type == TokenType::Colon) {
+    std::string name = current.text;
+    advance(); // ident
+    advance(); // colon
+    return std::make_unique<Stmt>(LabelStmt{name});
+  }
   if (current.type == TokenType::KW_Dim)
     return parse_dim();
   if (current.type == TokenType::KW_Let)
@@ -379,6 +400,7 @@ Parser::parse_statements(std::vector<TokenType> stop_tokens) {
   while (consume(TokenType::EOL)) ;
   std::vector<StmtPtr> stmts;
   while (true) {
+    while (consume(TokenType::EOL)) ;
     bool stop = false;
     for (auto t : stop_tokens) {
       if (current.type == t) {
