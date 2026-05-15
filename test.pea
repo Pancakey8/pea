@@ -1,0 +1,27 @@
+-3.5
+5.5
+
+DiM foo AS Integer = 10 - 5
+
+leT foo = 80
+
+if x = 3 then
+  print("Hello")
+else if x < 5 then
+  print("Hi")
+else
+  print("Bar")
+end IF
+
+do while x <> 10
+  let x = x - 1
+loop
+
+do
+  let x = x - 1
+  let y = 35
+loop while x <> 10
+
+for i = 1 TO 10 step 2
+  print(i)
+end for

@@ -42,6 +42,8 @@ int Parser::get_precedence(TokenType type) {
     return 30;
   case TokenType::Caret:
     return 40;
+  case TokenType::LParen:
+    return 50;
   default:
     return 0;
   }
@@ -184,6 +186,7 @@ std::expected<StmtPtr, Error> Parser::parse_statement() {
     return std::unexpected(expr.error());
   if (!consume(TokenType::EOL))
     return std::unexpected(Error{"Expected EOL", current.line, current.col});
+  while (consume(TokenType::EOL)) ;
   return std::make_unique<Stmt>(ExprStmt{std::move(*expr)});
 }
 
@@ -207,6 +210,7 @@ std::expected<StmtPtr, Error> Parser::parse_dim() {
   }
   if (!consume(TokenType::EOL))
     return std::unexpected(Error{"Expected EOL", current.line, current.col});
+  while (consume(TokenType::EOL)) ;
   return std::make_unique<Stmt>(DimStmt{name, type, std::move(init)});
 }
 
@@ -222,6 +226,7 @@ std::expected<StmtPtr, Error> Parser::parse_let() {
     return std::unexpected(val.error());
   if (!consume(TokenType::EOL))
     return std::unexpected(Error{"Expected EOL", current.line, current.col});
+  while (consume(TokenType::EOL)) ;
   return std::make_unique<Stmt>(LetStmt{name, std::move(*val)});
 }
 
@@ -234,6 +239,7 @@ std::expected<StmtPtr, Error> Parser::parse_if() {
     return std::unexpected(Error{"Expected 'then'", current.line, current.col});
   if (!consume(TokenType::EOL))
     return std::unexpected(Error{"Expected EOL", current.line, current.col});
+  while (consume(TokenType::EOL)) ;
 
   auto then_branch = parse_statements(TokenType::KW_Else);
   if (!then_branch)
@@ -248,6 +254,9 @@ std::expected<StmtPtr, Error> Parser::parse_if() {
         return std::unexpected(nested_if.error());
       else_branch.push_back(std::move(*nested_if));
     } else {
+      if (!consume(TokenType::EOL))
+	return std::unexpected(Error{"Expected EOL", current.line, current.col});
+      while (consume(TokenType::EOL)) ;
       auto stmts = parse_statements(TokenType::KW_EndIf);
       if (!stmts)
         return std::unexpected(stmts.error());
@@ -257,6 +266,9 @@ std::expected<StmtPtr, Error> Parser::parse_if() {
   }
   if (!consume(TokenType::KW_EndIf))
     return std::unexpected(Error{"Expected 'end if'", current.line, current.col});
+  if (!consume(TokenType::EOL))
+    return std::unexpected(Error{"Expected EOL", current.line, current.col});
+  while (consume(TokenType::EOL)) ;
   return std::make_unique<Stmt>(IfStmt{
       std::move(*cond), std::move(*then_branch), std::move(else_branch)});
 }
@@ -287,11 +299,15 @@ std::expected<StmtPtr, Error> Parser::parse_for() {
   }
   if (!consume(TokenType::EOL))
     return std::unexpected(Error{"Expected EOL", current.line, current.col});
+  while (consume(TokenType::EOL)) ;
   auto body = parse_statements(TokenType::KW_EndFor);
   if (!body)
     return std::unexpected(body.error());
   if (!consume(TokenType::KW_EndFor))
     return std::unexpected(Error{"Expected 'end for'", current.line, current.col});
+  if (!consume(TokenType::EOL))
+    return std::unexpected(Error{"Expected EOL", current.line, current.col});
+  while (consume(TokenType::EOL)) ;
   return std::make_unique<Stmt>(ForStmt{var, std::move(*start), std::move(*end),
                                         std::move(step), std::move(*body)});
 }
@@ -320,6 +336,7 @@ std::expected<StmtPtr, Error> Parser::parse_do() {
       return std::unexpected(cond_parse.error());
     if (!consume(TokenType::EOL))
       return std::unexpected(Error{"Expected EOL", current.line, current.col});
+    while (consume(TokenType::EOL)) ;
     auto body_parse = parse_statements(TokenType::KW_Loop);
     if (!body_parse)
       return std::unexpected(body_parse.error());
@@ -342,6 +359,7 @@ std::expected<StmtPtr, Error> Parser::parse_do() {
   }
   if (!consume(TokenType::EOL))
     return std::unexpected(Error{"Expected EOL", current.line, current.col});
+  while (consume(TokenType::EOL)) ;
   return std::make_unique<Stmt>(
       DoStmt{std::move(body), std::move(cond), while_at_start});
 }
