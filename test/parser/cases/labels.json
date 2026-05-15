@@ -1,1 +1,1 @@
-TODO
+{"statements":[{"type":"LabelStmt","name":"foo"},{"type":"ExprStmt","expr":{"type":"Call","callee":{"type":"Variable","name":"print"},"args":[{"type":"Literal","value":"Hello"}]}},{"type":"LabelStmt","name":"bar"},{"type":"ExprStmt","expr":{"type":"Call","callee":{"type":"Variable","name":"print"},"args":[{"type":"Literal","value":"hey"}]}}]}
