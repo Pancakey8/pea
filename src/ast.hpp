@@ -45,10 +45,13 @@ struct LetStmt {
   std::string name;
   ExprPtr value;
 };
+
+using ElseBranch = std::variant<std::monostate, std::vector<StmtPtr>, StmtPtr>;
+
 struct IfStmt {
   ExprPtr condition;
   std::vector<StmtPtr> then_branch;
-  std::vector<StmtPtr> else_branch;
+  ElseBranch else_branch;
 };
 struct ForStmt {
   std::string var;

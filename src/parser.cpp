@@ -147,26 +147,6 @@ std::expected<ExprPtr, Error> Parser::parse_expression(int precedence) {
 }
 
 std::expected<StmtPtr, Error> Parser::parse_statement() {
-  std::string label;
-  if (current.type == TokenType::Ident) {
-    // Peek for colon
-    // Since we can't peek easily, we check if it's a label or a statement
-    // In this grammar, labels are (ident ':').
-    // We'll assume if it's an ident and the next is ':', it's a label.
-    // This requires a peek. Let's simulate it by checking the next token.
-    // For simplicity in this implementation, we'll check if it's a keyword
-    // first.
-  }
-
-  // Check for label
-  if (current.type == TokenType::Ident) {
-    // This is ambiguous with expression statements.
-    // We need to check if the next token is ':'.
-    // Since we don't have a peek(), we'll handle it in the logic.
-  }
-
-  // To handle labels correctly, we'd need a peek().
-  // Let's assume for now we check keywords first.
   if (current.type == TokenType::KW_Dim)
     return parse_dim();
   if (current.type == TokenType::KW_Let)
@@ -241,36 +221,62 @@ std::expected<StmtPtr, Error> Parser::parse_if() {
     return std::unexpected(Error{"Expected EOL", current.line, current.col});
   while (consume(TokenType::EOL)) ;
 
-  auto then_branch = parse_statements(TokenType::KW_Else);
+  auto then_branch = parse_statements({TokenType::KW_Else, TokenType::KW_EndIf});
   if (!then_branch)
     return std::unexpected(then_branch.error());
 
-  std::vector<StmtPtr> else_branch;
-  while (current.type == TokenType::KW_Else) {
-    advance();
-    if (current.type == TokenType::KW_If) {
-      auto nested_if = parse_if();
-      if (!nested_if)
-        return std::unexpected(nested_if.error());
-      else_branch.push_back(std::move(*nested_if));
-    } else {
-      if (!consume(TokenType::EOL))
-	return std::unexpected(Error{"Expected EOL", current.line, current.col});
-      while (consume(TokenType::EOL)) ;
-      auto stmts = parse_statements(TokenType::KW_EndIf);
-      if (!stmts)
-        return std::unexpected(stmts.error());
-      for (auto &s : *stmts)
-        else_branch.push_back(std::move(s));
-    }
-  }
-  if (!consume(TokenType::KW_EndIf))
-    return std::unexpected(Error{"Expected 'end if'", current.line, current.col});
+  auto else_branch = parse_else_branch();
+  if (!else_branch)
+    return std::unexpected(else_branch.error());
+
   if (!consume(TokenType::EOL))
     return std::unexpected(Error{"Expected EOL", current.line, current.col});
   while (consume(TokenType::EOL)) ;
+
   return std::make_unique<Stmt>(IfStmt{
-      std::move(*cond), std::move(*then_branch), std::move(else_branch)});
+      std::move(*cond), std::move(*then_branch), std::move(*else_branch)});
+}
+
+std::expected<ElseBranch, Error> Parser::parse_else_branch() {
+  if (current.type == TokenType::KW_EndIf) {
+    advance();
+    return std::monostate{};
+  }
+
+  if (current.type == TokenType::KW_Else) {
+    advance(); // else
+    if (current.type == TokenType::KW_If) {
+      advance(); // if
+      auto cond = parse_expression();
+      if (!cond)
+        return std::unexpected(cond.error());
+      if (!consume(TokenType::KW_Then))
+        return std::unexpected(Error{"Expected 'then'", current.line, current.col});
+      if (!consume(TokenType::EOL))
+        return std::unexpected(Error{"Expected EOL", current.line, current.col});
+      while (consume(TokenType::EOL)) ;
+
+      auto then_branch = parse_statements({TokenType::KW_Else, TokenType::KW_EndIf});
+      if (!then_branch)
+        return std::unexpected(then_branch.error());
+
+      auto else_branch = parse_else_branch();
+      if (!else_branch)
+        return std::unexpected(else_branch.error());
+
+      return std::make_unique<Stmt>(IfStmt{
+          std::move(*cond), std::move(*then_branch), std::move(*else_branch)});
+    } else {
+      auto else_stmts = parse_statements({TokenType::KW_EndIf});
+      if (!else_stmts)
+        return std::unexpected(else_stmts.error());
+      if (!consume(TokenType::KW_EndIf))
+        return std::unexpected(Error{"Expected 'end if'", current.line, current.col});
+      return std::move(*else_stmts);
+    }
+  }
+
+  return std::unexpected(Error{"Expected 'else' or 'end if'", current.line, current.col});
 }
 
 std::expected<StmtPtr, Error> Parser::parse_for() {
@@ -300,7 +306,7 @@ std::expected<StmtPtr, Error> Parser::parse_for() {
   if (!consume(TokenType::EOL))
     return std::unexpected(Error{"Expected EOL", current.line, current.col});
   while (consume(TokenType::EOL)) ;
-  auto body = parse_statements(TokenType::KW_EndFor);
+  auto body = parse_statements({TokenType::KW_EndFor});
   if (!body)
     return std::unexpected(body.error());
   if (!consume(TokenType::KW_EndFor))
@@ -337,14 +343,14 @@ std::expected<StmtPtr, Error> Parser::parse_do() {
     if (!consume(TokenType::EOL))
       return std::unexpected(Error{"Expected EOL", current.line, current.col});
     while (consume(TokenType::EOL)) ;
-    auto body_parse = parse_statements(TokenType::KW_Loop);
+    auto body_parse = parse_statements({TokenType::KW_Loop});
     if (!body_parse)
       return std::unexpected(body_parse.error());
     body = std::move(*body_parse);
     if (!consume(TokenType::KW_Loop))
       return std::unexpected(Error{"Expected 'loop'", current.line, current.col});
   } else {
-    auto body_parse = parse_statements(TokenType::KW_Loop);
+    auto body_parse = parse_statements({TokenType::KW_Loop});
     if (!body_parse)
       return std::unexpected(body_parse.error());
     body = std::move(*body_parse);
@@ -365,9 +371,19 @@ std::expected<StmtPtr, Error> Parser::parse_do() {
 }
 
 std::expected<std::vector<StmtPtr>, Error>
-Parser::parse_statements(TokenType stop_token) {
+Parser::parse_statements(std::vector<TokenType> stop_tokens) {
   std::vector<StmtPtr> stmts;
-  while (current.type != stop_token && current.type != TokenType::EndOfFile) {
+  while (true) {
+    bool stop = false;
+    for (auto t : stop_tokens) {
+      if (current.type == t) {
+        stop = true;
+        break;
+      }
+    }
+    if (stop || current.type == TokenType::EndOfFile)
+      break;
+
     auto stmt = parse_statement();
     if (!stmt)
       return std::unexpected(stmt.error());

@@ -21,11 +21,12 @@ private:
 
   std::expected<StmtPtr, Error> parse_statement();
   std::expected<std::vector<StmtPtr>, Error>
-  parse_statements(TokenType stop_token = TokenType::EndOfFile);
+  parse_statements(std::vector<TokenType> stop_tokens = {TokenType::EndOfFile});
 
   std::expected<StmtPtr, Error> parse_dim();
   std::expected<StmtPtr, Error> parse_let();
   std::expected<StmtPtr, Error> parse_if();
+  std::expected<ElseBranch, Error> parse_else_branch();
   std::expected<StmtPtr, Error> parse_for();
   std::expected<StmtPtr, Error> parse_goto();
   std::expected<StmtPtr, Error> parse_do();
