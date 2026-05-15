@@ -21,11 +21,14 @@ std::string read_file(const fs::path& path) {
     std::ifstream in{path};
     std::stringstream ss;
     ss << in.rdbuf();
-    return ss.str();
+    std::string contents{ss.str()};
+    if (!contents.empty() && contents.back() == '\n')
+      contents.pop_back();
+    return contents;
 }
 
 bool run_test(const TestCase& tc) {
-    std::string input = read_file(tc.pea_path);
+    std::string input = read_file(tc.pea_path) + "\n";
     Lexer lexer{input};
     Parser parser{lexer};
 

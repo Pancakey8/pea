@@ -125,7 +125,7 @@ std::expected<ExprPtr, Error> Parser::parse_infix(ExprPtr left) {
   advance();
 
   // Right associativity for Caret (^)
-  int next_prec = (op == TokenType::Caret) ? prec : prec + 1;
+  int next_prec = (op == TokenType::Caret) ? prec - 1 : prec + 1;
   auto right = parse_expression(next_prec);
   if (!right)
     return right;
