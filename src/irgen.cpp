@@ -58,6 +58,44 @@ std::expected<void, Error> IrGen::emit(Stmt const &stmt) {
       return {};
     },
     [&](IfStmt const &s) -> std::expected<void, Error> {
+      auto l_else = label_get();
+      auto l_end = label_get();
+
+      if (auto res = emit(*s.condition); !res)
+        return std::unexpected(res.error());
+
+      prog.push_back({ Instruction::JumpZero, l_else });
+
+      for (auto const &stmt : s.then_branch) {
+        if (auto res = emit(*stmt); !res)
+          return std::unexpected(res.error());
+      }
+      prog.push_back({ Instruction::Goto, l_end });
+
+      prog.push_back({ Instruction::Label, l_else });
+
+      auto else_res = std::visit(Overloaded{
+        [&](std::monostate) -> std::expected<void, Error> {
+          return {};
+        },
+        [&](std::vector<StmtPtr> const &branch) -> std::expected<void, Error> {
+          for (auto const &stmt : branch) {
+            if (auto res = emit(*stmt); !res)
+              return std::unexpected(res.error());
+          }
+          return {};
+        },
+        [&](StmtPtr const &branch) -> std::expected<void, Error> {
+          if (auto res = emit(*branch); !res)
+            return std::unexpected(res.error());
+          return {};
+        }
+      }, s.else_branch);
+
+      if (!else_res) return std::unexpected(else_res.error());
+
+      prog.push_back({ Instruction::Label, l_end });
+
       return {};
     },
     [&](ForStmt const &s) -> std::expected<void, Error> { return {}; },
@@ -268,6 +306,12 @@ std::ostream &operator<<(std::ostream &os, ProgramIr const &ir) {
         ir.labels.end(),
         [&instr](auto const &p) { return p.second == instr.data; });
       os << "GOTO " << instr.data << "[" << name->first << "]\n";
+    } break;
+    case Instruction::JumpZero: {
+      auto name = std::find_if(ir.labels.begin(),
+        ir.labels.end(),
+        [&instr](auto const &p) { return p.second == instr.data; });
+      os << "JUMP_ZERO " << instr.data << "[" << name->first << "]\n";
     } break;
     case Instruction::Extension:
       break;
