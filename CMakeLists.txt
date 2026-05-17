@@ -11,9 +11,13 @@ add_library(pea-parser src/parser.cpp src/ast_print.cpp)
 target_include_directories(pea-parser PUBLIC src/)
 target_link_libraries(pea-parser pea-lexer)
 
+add_library(pea-irgen src/irgen.cpp)
+target_include_directories(pea-irgen PUBLIC src/)
+target_link_libraries(pea-irgen pea-parser pea-lexer)
+
 add_executable(pea src/main.cpp)
 target_include_directories(pea PUBLIC src/)
-target_link_libraries(pea pea-lexer pea-parser)
+target_link_libraries(pea pea-lexer pea-parser pea-irgen)
 
 add_executable(pea-test-parser test/parser/test_runner.cpp)
 target_link_libraries(pea-test-parser pea-lexer pea-parser)

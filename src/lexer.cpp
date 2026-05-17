@@ -176,9 +176,9 @@ std::expected<Token, Error> Lexer::read_ident_or_keyword() {
       pos = save_pos;
       col = save_col;
     }
-    return Token{it->second, text, 0, 0, line, start_col};
+    return Token{it->second, lower, 0, 0, line, start_col};
   }
-  return Token{TokenType::Ident, text, 0, 0, line, start_col};
+  return Token{TokenType::Ident, lower, 0, 0, line, start_col};
 }
 
 std::expected<Token, Error> Lexer::read_operator() {

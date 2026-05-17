@@ -1,3 +1,4 @@
+#include "irgen.hpp"
 #include "lexer.hpp"
 #include "parser.hpp"
 #include "ast.hpp"
@@ -33,5 +34,15 @@ int main() {
     return 1;
   }
 
-  std::cout << *prog;
+  std::cout << *prog << '\n';
+
+  IrGen gen{};
+  auto ir = gen.generate(*prog);
+  if (!ir) {
+    std::println("Error {}:{}: {}", ir.error().line, ir.error().col,
+                 ir.error().message);
+    return 1;
+  }
+
+  std::cout << *ir << '\n';
 }
