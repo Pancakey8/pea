@@ -64,7 +64,7 @@ std::expected<void, Error> IrGen::emit(Stmt const &stmt) {
       if (auto res = emit(*s.condition); !res)
         return std::unexpected(res.error());
 
-      prog.push_back({ Instruction::JumpZero, l_else });
+      prog.push_back({ Instruction::JumpFalse, l_else });
 
       for (auto const &stmt : s.then_branch) {
         if (auto res = emit(*stmt); !res)
@@ -74,25 +74,26 @@ std::expected<void, Error> IrGen::emit(Stmt const &stmt) {
 
       prog.push_back({ Instruction::Label, l_else });
 
-      auto else_res = std::visit(Overloaded{
-        [&](std::monostate) -> std::expected<void, Error> {
-          return {};
-        },
-        [&](std::vector<StmtPtr> const &branch) -> std::expected<void, Error> {
-          for (auto const &stmt : branch) {
-            if (auto res = emit(*stmt); !res)
+      auto else_res = std::visit(
+        Overloaded{
+          [&](std::monostate) -> std::expected<void, Error> { return {}; },
+          [&](
+            std::vector<StmtPtr> const &branch) -> std::expected<void, Error> {
+            for (auto const &stmt : branch) {
+              if (auto res = emit(*stmt); !res)
+                return std::unexpected(res.error());
+            }
+            return {};
+          },
+          [&](StmtPtr const &branch) -> std::expected<void, Error> {
+            if (auto res = emit(*branch); !res)
               return std::unexpected(res.error());
-          }
-          return {};
-        },
-        [&](StmtPtr const &branch) -> std::expected<void, Error> {
-          if (auto res = emit(*branch); !res)
-            return std::unexpected(res.error());
-          return {};
-        }
-      }, s.else_branch);
+            return {};
+          } },
+        s.else_branch);
 
-      if (!else_res) return std::unexpected(else_res.error());
+      if (!else_res)
+        return std::unexpected(else_res.error());
 
       prog.push_back({ Instruction::Label, l_end });
 
@@ -104,7 +105,33 @@ std::expected<void, Error> IrGen::emit(Stmt const &stmt) {
       prog.push_back({ Instruction::Goto, l });
       return {};
     },
-    [&](DoStmt const &s) -> std::expected<void, Error> { return {}; },
+    [&](DoStmt const &s) -> std::expected<void, Error> {
+      if (s.while_at_start) {
+	auto l_start = label_get();
+        prog.push_back({ Instruction::Label, l_start });
+        if (auto res = emit(*s.condition); !res)
+          return std::unexpected(res.error());
+        auto l_end = label_get();
+        prog.push_back({ Instruction::JumpFalse, l_end });
+        for (auto const &stmt : s.body) {
+          if (auto res = emit(*stmt); !res)
+            return std::unexpected(res.error());
+        }
+        prog.push_back({ Instruction::Goto, l_start });
+        prog.push_back({ Instruction::Label, l_end });
+      } else {
+	auto l_start = label_get();
+        prog.push_back({ Instruction::Label, l_start });
+        for (auto const &stmt : s.body) {
+          if (auto res = emit(*stmt); !res)
+            return std::unexpected(res.error());
+        }
+        if (auto res = emit(*s.condition); !res)
+          return std::unexpected(res.error());
+        prog.push_back({ Instruction::JumpTrue, l_start });
+      }
+      return {};
+    },
     [&](ExprStmt const &s) -> std::expected<void, Error> {
       if (auto res = emit(*s.expr); !res)
         return std::unexpected(res.error());
@@ -252,7 +279,7 @@ std::optional<std::uint16_t> IrGen::resolve_type(std::string const &name) {
 
 std::uint16_t IrGen::label_get() {
   std::uint16_t id = label_next++;
-  std::string name{"$LABEL" + std::to_string(id)};
+  std::string name{ "$LABEL" + std::to_string(id) };
   labels.insert({ name, id });
   return id;
 }
@@ -307,11 +334,17 @@ std::ostream &operator<<(std::ostream &os, ProgramIr const &ir) {
         [&instr](auto const &p) { return p.second == instr.data; });
       os << "GOTO " << instr.data << "[" << name->first << "]\n";
     } break;
-    case Instruction::JumpZero: {
+    case Instruction::JumpFalse: {
       auto name = std::find_if(ir.labels.begin(),
         ir.labels.end(),
         [&instr](auto const &p) { return p.second == instr.data; });
-      os << "JUMP_ZERO " << instr.data << "[" << name->first << "]\n";
+      os << "JUMP_FALSE " << instr.data << "[" << name->first << "]\n";
+    } break;
+    case Instruction::JumpTrue: {
+      auto name = std::find_if(ir.labels.begin(),
+        ir.labels.end(),
+        [&instr](auto const &p) { return p.second == instr.data; });
+      os << "JUMP_TRUE " << instr.data << "[" << name->first << "]\n";
     } break;
     case Instruction::Extension:
       break;

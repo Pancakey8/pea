@@ -32,7 +32,8 @@ struct Instruction {
     Pop,
     Label,
     Goto,
-    JumpZero,
+    JumpFalse,
+    JumpTrue,
     Extension = 0xFF
   } kind;
   std::uint16_t data;
