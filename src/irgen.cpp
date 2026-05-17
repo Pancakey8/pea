@@ -36,8 +36,9 @@ std::expected<void, Error> IrGen::emit(Stmt const &stmt) {
     [&](DimStmt const &s) -> std::expected<void, Error> {
       auto type = resolve_type(s.type);
       if (!type)
-        return std::unexpected(
-          Error{ std::format("Unknown type '{}'", s.type), 0, 0 });
+        return std::unexpected(Error{ std::format("Unknown type '{}'", s.type),
+          stmt.range.start.line,
+          stmt.range.start.col });
 
       if (auto res = emit(*s.init); !res)
         return std::unexpected(res.error());
@@ -99,7 +100,42 @@ std::expected<void, Error> IrGen::emit(Stmt const &stmt) {
 
       return {};
     },
-    [&](ForStmt const &s) -> std::expected<void, Error> { return {}; },
+    [&](ForStmt const &s) -> std::expected<void, Error> {
+      auto var = var_register(s.var);
+      if (auto res = emit(*s.start); !res)
+        return std::unexpected(res.error());
+
+      prog.push_back({ Instruction::StoreVar, var });
+      auto l_start = label_get();
+      prog.push_back({ Instruction::Label, l_start });
+
+      for (auto const &stmt : s.body) {
+        if (auto res = emit(*stmt); !res)
+          return std::unexpected(res.error());
+      }
+
+      if (s.step) {
+        prog.push_back({ Instruction::LoadVar, var });
+        if (auto res = emit(*s.step); !res)
+          return std::unexpected(res.error());
+        prog.push_back({ Instruction::Add });
+        prog.push_back({ Instruction::StoreVar, var });
+      } else {
+        auto c = const_register({ PeaNumber{ 1 } });
+        prog.push_back({ Instruction::LoadVar, var });
+        prog.push_back({ Instruction::LoadConst, c });
+        prog.push_back({ Instruction::Add });
+        prog.push_back({ Instruction::StoreVar, var });
+      }
+
+      prog.push_back({ Instruction::LoadVar, var });
+      if (auto res = emit(*s.end); !res)
+        return std::unexpected(res.error());
+      prog.push_back({ Instruction::LessThanEq });
+      prog.push_back({ Instruction::JumpTrue, l_start });
+
+      return {};
+    },
     [&](GotoStmt const &s) -> std::expected<void, Error> {
       auto l = label_register(s.label);
       prog.push_back({ Instruction::Goto, l });
@@ -107,7 +143,7 @@ std::expected<void, Error> IrGen::emit(Stmt const &stmt) {
     },
     [&](DoStmt const &s) -> std::expected<void, Error> {
       if (s.while_at_start) {
-	auto l_start = label_get();
+        auto l_start = label_get();
         prog.push_back({ Instruction::Label, l_start });
         if (auto res = emit(*s.condition); !res)
           return std::unexpected(res.error());
@@ -120,7 +156,7 @@ std::expected<void, Error> IrGen::emit(Stmt const &stmt) {
         prog.push_back({ Instruction::Goto, l_start });
         prog.push_back({ Instruction::Label, l_end });
       } else {
-	auto l_start = label_get();
+        auto l_start = label_get();
         prog.push_back({ Instruction::Label, l_start });
         for (auto const &stmt : s.body) {
           if (auto res = emit(*stmt); !res)
@@ -290,6 +326,9 @@ std::ostream &operator<<(std::ostream &os, ProgramIr const &ir) {
     switch (instr.kind) {
     case Instruction::Add:
       os << "ADD\n";
+      break;
+    case Instruction::LessThanEq:
+      os << "LESS_THAN_EQ\n";
       break;
     case Instruction::LoadVar: {
       auto name = std::find_if(ir.vars.begin(),

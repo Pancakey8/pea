@@ -25,6 +25,7 @@ struct PeaValue {
 struct Instruction {
   enum : std::uint8_t {
     Add,
+    LessThanEq,
     LoadVar,
     DefineVar,
     StoreVar,

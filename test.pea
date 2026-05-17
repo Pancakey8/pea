@@ -1,7 +1,7 @@
-Do While x<>10
-  Let x = x + 1
-Loop
+For i = 1 To 10
+  1 + 1
+End For
 
-Do
-  Let x = x + 1
-Loop While x<>10
+For i = 0 To 10 Step 5
+  1 + 1
+End For

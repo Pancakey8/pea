@@ -17,8 +17,7 @@ struct SourceRange {
 
 struct Error {
   std::string message;
-  int line;
-  int col;
+  SourceRange range;
 };
 
 enum class TokenType {
