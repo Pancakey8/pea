@@ -12,6 +12,7 @@ public:
 private:
   Lexer &lexer;
   Token current;
+  Token last;
   std::optional<Token> peeked_token;
 
   void advance();

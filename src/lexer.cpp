@@ -16,7 +16,7 @@ void Lexer::skip_whitespace() {
 std::expected<Token, Error> Lexer::next_token() {
   skip_whitespace();
   if (pos >= source.size())
-    return Token{TokenType::EndOfFile, "", 0, 0, line, col};
+    return Token{TokenType::EndOfFile, "", 0, 0, {line, col}, {line, col}};
 
   char c = source[pos];
   int start_col = col;
@@ -25,7 +25,7 @@ std::expected<Token, Error> Lexer::next_token() {
     pos++;
     line++;
     col = 1;
-    return Token{TokenType::EOL, "\n", 0, 0, line - 1, start_col};
+    return Token{TokenType::EOL, "\n", 0, 0, {line - 1, start_col}, {line - 1, start_col + 1}};
   }
 
   if (std::isdigit(c) || ((c == '+' || c == '-') && pos + 1 < source.size() &&
@@ -61,7 +61,7 @@ std::expected<Token, Error> Lexer::read_number() {
     }
   }
   std::string text{source.substr(start, pos - start)};
-  return Token{TokenType::Number, text, std::stod(text), 0, line, start_col};
+  return Token{TokenType::Number, text, std::stod(text), 0, {line, start_col}, {line, col}};
 }
 
 std::expected<Token, Error> Lexer::read_string() {
@@ -94,7 +94,7 @@ std::expected<Token, Error> Lexer::read_string() {
     return std::unexpected(Error{"Unterminated string", line, col});
   pos++;
   col++; // skip "
-  return Token{TokenType::String, result, 0, 0, line, start_col};
+  return Token{TokenType::String, result, 0, 0, {line, start_col}, {line, col}};
 }
 
 std::expected<Token, Error> Lexer::read_char() {
@@ -126,8 +126,7 @@ std::expected<Token, Error> Lexer::read_char() {
     return std::unexpected(Error{"Missing closing quote for char", line, col});
   pos++;
   col++;
-  return Token{TokenType::Char, std::string(1, result), 0, result, line,
-               start_col};
+  return Token{TokenType::Char, std::string(1, result), 0, result, {line, start_col}, {line, col}};
 }
 
 std::expected<Token, Error> Lexer::read_ident_or_keyword() {
@@ -167,18 +166,18 @@ std::expected<Token, Error> Lexer::read_ident_or_keyword() {
       if (pos + 2 <= source.size() && to_lower(source.substr(pos, 2)) == "if") {
         pos += 2;
         col += 2;
-        return Token{TokenType::KW_EndIf, "end if", 0, 0, line, start_col};
+        return Token{TokenType::KW_EndIf, "end if", 0, 0, {line, start_col}, {line, col}};
       } else if (pos + 3 <= source.size() && to_lower(source.substr(pos, 3)) == "for") {
         pos += 3;
         col += 3;
-        return Token{TokenType::KW_EndFor, "end for", 0, 0, line, start_col};
+        return Token{TokenType::KW_EndFor, "end for", 0, 0, {line, start_col}, {line, col}};
       }
       pos = save_pos;
       col = save_col;
     }
-    return Token{it->second, lower, 0, 0, line, start_col};
+    return Token{it->second, lower, 0, 0, {line, start_col}, {line, col}};
   }
-  return Token{TokenType::Ident, lower, 0, 0, line, start_col};
+  return Token{TokenType::Ident, lower, 0, 0, {line, start_col}, {line, col}};
 }
 
 std::expected<Token, Error> Lexer::read_operator() {
@@ -187,49 +186,49 @@ std::expected<Token, Error> Lexer::read_operator() {
   pos++;
   col++;
   if (c == '+')
-    return Token{TokenType::Plus, "+", 0, 0, line, start_col};
+    return Token{TokenType::Plus, "+", 0, 0, {line, start_col}, {line, col}};
   if (c == '-')
-    return Token{TokenType::Minus, "-", 0, 0, line, start_col};
+    return Token{TokenType::Minus, "-", 0, 0, {line, start_col}, {line, col}};
   if (c == '*')
-    return Token{TokenType::Star, "*", 0, 0, line, start_col};
+    return Token{TokenType::Star, "*", 0, 0, {line, start_col}, {line, col}};
   if (c == '/')
-    return Token{TokenType::Slash, "/", 0, 0, line, start_col};
+    return Token{TokenType::Slash, "/", 0, 0, {line, start_col}, {line, col}};
   if (c == '^')
-    return Token{TokenType::Caret, "^", 0, 0, line, start_col};
+    return Token{TokenType::Caret, "^", 0, 0, {line, start_col}, {line, col}};
   if (c == '\\')
-    return Token{TokenType::Backslash, "\\", 0, 0, line, start_col};
+    return Token{TokenType::Backslash, "\\", 0, 0, {line, start_col}, {line, col}};
   if (c == '(')
-    return Token{TokenType::LParen, "(", 0, 0, line, start_col};
+    return Token{TokenType::LParen, "(", 0, 0, {line, start_col}, {line, col}};
   if (c == ')')
-    return Token{TokenType::RParen, ")", 0, 0, line, start_col};
+    return Token{TokenType::RParen, ")", 0, 0, {line, start_col}, {line, col}};
   if (c == ',')
-    return Token{TokenType::Comma, ",", 0, 0, line, start_col};
+    return Token{TokenType::Comma, ",", 0, 0, {line, start_col}, {line, col}};
   if (c == ':')
-    return Token{TokenType::Colon, ":", 0, 0, line, start_col};
+    return Token{TokenType::Colon, ":", 0, 0, {line, start_col}, {line, col}};
   if (c == '&')
-    return Token{TokenType::Amp, "&", 0, 0, line, start_col};
+    return Token{TokenType::Amp, "&", 0, 0, {line, start_col}, {line, col}};
   if (c == '=')
-    return Token{TokenType::Eq, "=", 0, 0, line, start_col};
+    return Token{TokenType::Eq, "=", 0, 0, {line, start_col}, {line, col}};
   if (c == '<') {
     if (pos < source.size() && source[pos] == '>') {
       pos++;
       col++;
-      return Token{TokenType::Neq, "<>", 0, 0, line, start_col};
+      return Token{TokenType::Neq, "<>", 0, 0, {line, start_col}, {line, col}};
     }
     if (pos < source.size() && source[pos] == '=') {
       pos++;
       col++;
-      return Token{TokenType::Lteq, "<=", 0, 0, line, start_col};
+      return Token{TokenType::Lteq, "<=", 0, 0, {line, start_col}, {line, col}};
     }
-    return Token{TokenType::Less, "<", 0, 0, line, start_col};
+    return Token{TokenType::Less, "<", 0, 0, {line, start_col}, {line, col}};
   }
   if (c == '>') {
     if (pos < source.size() && source[pos] == '=') {
       pos++;
       col++;
-      return Token{TokenType::Gteq, ">=", 0, 0, line, start_col};
+      return Token{TokenType::Gteq, ">=", 0, 0, {line, start_col}, {line, col}};
     }
-    return Token{TokenType::Great, ">", 0, 0, line, start_col};
+    return Token{TokenType::Great, ">", 0, 0, {line, start_col}, {line, col}};
   }
   return std::unexpected(Error{"Unexpected character: " + std::string(1, c), line, start_col});
 }
@@ -285,6 +284,6 @@ std::string to_string(TokenType type) {
 
 std::ostream& operator<<(std::ostream& os, const Token& token) {
   os << "Token{" << to_string(token.type) << ", text=\"" << token.text 
-     << "\", line=" << token.line << ", col=" << token.col << "}";
+     << "\", line=" << token.start.line << ", col=" << token.start.col << "}";
   return os;
 }

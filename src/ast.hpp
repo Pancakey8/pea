@@ -31,7 +31,8 @@ struct Call {
 
 struct Expr {
   std::variant<Literal, Variable, BinaryOp, UnaryOp, Call> data;
-  Expr(auto &&val) : data(std::forward<decltype(val)>(val)) {}
+  SourceRange range;
+  Expr(auto &&val, SourceRange range) : data(std::forward<decltype(val)>(val)), range(range) {}
 };
 
 struct Stmt;
@@ -80,11 +81,13 @@ struct Stmt {
   std::variant<DimStmt, LetStmt, IfStmt, ForStmt, GotoStmt, DoStmt, ExprStmt,
                LabelStmt>
       data;
-  Stmt(auto &&val) : data(std::forward<decltype(val)>(val)) {}
+  SourceRange range;
+  Stmt(auto &&val, SourceRange range) : data(std::forward<decltype(val)>(val)), range(range) {}
 };
 
 struct Program {
   std::vector<StmtPtr> statements;
+  SourceRange range;
 };
 
 std::ostream& operator<<(std::ostream& os, const Program& prog);

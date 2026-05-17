@@ -5,6 +5,16 @@
 #include <vector>
 #include <ostream>
 
+struct SourceLocation {
+  int line;
+  int col;
+};
+
+struct SourceRange {
+  SourceLocation start;
+  SourceLocation end;
+};
+
 struct Error {
   std::string message;
   int line;
@@ -66,8 +76,8 @@ struct Token {
   std::string text;
   double number = 0.0;
   char character = 0;
-  int line = 1;
-  int col = 1;
+  SourceLocation start;
+  SourceLocation end;
 };
 
 std::string to_string(TokenType type);
