@@ -2,7 +2,9 @@
 #include "ast.hpp"
 #include "lexer.hpp"
 #include <iostream>
+#include <iterator>
 #include <print>
+#include <ranges>
 #include <utility>
 
 template <class... Fs> struct Overloaded : Fs... {
@@ -157,14 +159,14 @@ std::expected<void, Error> IrGen::emit(Stmt const &stmt) {
         if (auto res = emit(*s.condition); !res)
           return std::unexpected(res.error());
         prog.push_back({ Instruction::JumpFalse, l_end });
-        
+
         loop_stack.push_back({ l_start, l_end });
         for (auto const &stmt : s.body) {
           if (auto res = emit(*stmt); !res)
             return std::unexpected(res.error());
         }
         loop_stack.pop_back();
-        
+
         prog.push_back({ Instruction::Goto, l_start });
         prog.push_back({ Instruction::Label, l_end });
       } else {
@@ -172,14 +174,14 @@ std::expected<void, Error> IrGen::emit(Stmt const &stmt) {
         auto l_continue = label_get();
         auto l_end = label_get();
         prog.push_back({ Instruction::Label, l_start });
-        
+
         loop_stack.push_back({ l_continue, l_end });
         for (auto const &stmt : s.body) {
           if (auto res = emit(*stmt); !res)
             return std::unexpected(res.error());
         }
         loop_stack.pop_back();
-        
+
         prog.push_back({ Instruction::Label, l_continue });
         if (auto res = emit(*s.condition); !res)
           return std::unexpected(res.error());
@@ -202,9 +204,29 @@ std::expected<void, Error> IrGen::emit(Stmt const &stmt) {
     [&](SubDecl const &s) -> std::expected<void, Error> {
       std::uint16_t id = func_next++;
       func_names.push_back(s.name);
+      func_bodies.push_back({});
+
+      auto c = const_register(PeaValue{ PeaFuncPtr{ id } });
+      prog.push_back({ Instruction::LoadConst, c });
+      auto v = var_register(s.name);
+      prog.push_back({ Instruction::StoreVar, v });
 
       std::vector<Instruction> main_prog = std::move(prog);
       prog.clear();
+
+      for (auto const &param : s.params | std::ranges::views::reverse) {
+        auto type = resolve_type(param.type);
+        if (!type)
+          return std::unexpected(
+            Error{ std::format("Unknown type '{}'", param.type),
+              stmt.range.start.line,
+              stmt.range.start.col });
+
+        auto var = var_register(param.name);
+        prog.push_back({ Instruction::DefineVar, var });
+        prog.push_back({ Instruction::Extension, *type });
+        prog.push_back({ Instruction::StoreVar, var });
+      }
 
       for (auto const &stmt : s.body) {
         if (auto res = emit(*stmt); !res) {
@@ -213,11 +235,8 @@ std::expected<void, Error> IrGen::emit(Stmt const &stmt) {
         }
       }
 
-      func_bodies.push_back(std::move(prog));
+      func_bodies[id] = std::move(prog);
       prog = std::move(main_prog);
-
-      auto c = const_register(PeaValue{ PeaFuncPtr{ id } });
-      prog.push_back({ Instruction::LoadConst, c });
 
       return {};
     },
@@ -226,7 +245,7 @@ std::expected<void, Error> IrGen::emit(Stmt const &stmt) {
         if (auto res = emit(*s.value); !res)
           return std::unexpected(res.error());
       }
-      prog.push_back({ Instruction::Return, 0 });
+      prog.push_back({ Instruction::Return, static_cast<uint16_t>(s.value ? 1 : 0) });
       return {};
     },
     [&](BreakStmt const &s) -> std::expected<void, Error> {
@@ -332,7 +351,7 @@ std::expected<void, Error> IrGen::emit(Expr const &expr) {
       }
       if (auto res = emit(*e.callee); !res)
         return std::unexpected(res.error());
-      prog.push_back({ Instruction::Call, 0 });
+      prog.push_back({ Instruction::Call, static_cast<uint16_t>(e.args.size()) });
       return {};
     }
   };
@@ -387,110 +406,107 @@ std::uint16_t IrGen::label_get() {
   return id;
 }
 
-std::ostream &operator<<(std::ostream &os, ProgramIr const &ir) {
-  for (auto it = ir.prog.begin(); it != ir.prog.end(); ++it) {
-    auto const &instr = *it;
-    switch (instr.kind) {
-    case Instruction::Add:
-      os << "ADD\n";
-      break;
-    case Instruction::LessThanEq:
-      os << "LESS_THAN_EQ\n";
-      break;
-    case Instruction::LoadVar: {
-      auto name = std::find_if(ir.vars.begin(),
-        ir.vars.end(),
-        [&instr](auto const &p) { return p.second == instr.data; });
-      os << "LOAD_VAR " << instr.data << "[" << name->first << "]\n";
-    } break;
-    case Instruction::DefineVar: {
-      auto name = std::find_if(ir.vars.begin(),
-        ir.vars.end(),
-        [&instr](auto const &p) { return p.second == instr.data; });
-      auto const &ext = *(++it);
-      auto type = std::find_if(ir.types.begin(),
-        ir.types.end(),
-        [&ext](auto const &p) { return p.second == ext.data; });
-      os << "DEFINE_VAR " << instr.data << "[" << name->first << "], "
-         << ext.data << "[" << type->first << "]\n";
-    } break;
-    case Instruction::StoreVar: {
-      auto name = std::find_if(ir.vars.begin(),
-        ir.vars.end(),
-        [&instr](auto const &p) { return p.second == instr.data; });
-      os << "STORE_VAR " << instr.data << "[" << name->first << "]\n";
-    } break;
-    case Instruction::LoadConst: {
-      os << "LOAD_CONST " << instr.data << "[";
-      std::visit([&os](auto const &v) {
+template <typename It>
+void print_instr(std::ostream &os, It &it, ProgramIr const &ir) {
+  auto const &instr = *it;
+  switch (instr.kind) {
+  case Instruction::Add:
+    os << "ADD\n";
+    break;
+  case Instruction::LessThanEq:
+    os << "LESS_THAN_EQ\n";
+    break;
+  case Instruction::LoadVar: {
+    auto name = std::find_if(ir.vars.begin(),
+      ir.vars.end(),
+      [&instr](auto const &p) { return p.second == instr.data; });
+    os << "LOAD_VAR " << instr.data << "[" << name->first << "]\n";
+  } break;
+  case Instruction::DefineVar: {
+    auto name = std::find_if(ir.vars.begin(),
+      ir.vars.end(),
+      [&instr](auto const &p) { return p.second == instr.data; });
+    auto const &ext = *(++it);
+    auto type = std::find_if(ir.types.begin(),
+      ir.types.end(),
+      [&ext](auto const &p) { return p.second == ext.data; });
+    os << "DEFINE_VAR " << instr.data << "[" << name->first << "], " << ext.data
+       << "[" << type->first << "]\n";
+  } break;
+  case Instruction::StoreVar: {
+    auto name = std::find_if(ir.vars.begin(),
+      ir.vars.end(),
+      [&instr](auto const &p) { return p.second == instr.data; });
+    os << "STORE_VAR " << instr.data << "[" << name->first << "]\n";
+  } break;
+  case Instruction::LoadConst: {
+    os << "LOAD_CONST " << instr.data << "[";
+    std::visit(
+      [&os](auto const &v) {
         using T = std::decay_t<decltype(v)>;
-        if constexpr (std::is_same_v<T, PeaNumber>) os << v.val;
-        else if constexpr (std::is_same_v<T, PeaChar>) os << v.val;
-        else if constexpr (std::is_same_v<T, PeaString>) os << v.val;
-        else if constexpr (std::is_same_v<T, PeaFuncPtr>) os << "func_ptr(" << v.id << ")";
+        if constexpr (std::is_same_v<T, PeaNumber>)
+          os << v.val;
+        else if constexpr (std::is_same_v<T, PeaChar>)
+          os << v.val;
+        else if constexpr (std::is_same_v<T, PeaString>)
+          os << v.val;
+        else if constexpr (std::is_same_v<T, PeaFuncPtr>)
+          os << "func_ptr(" << v.id << ")";
         os << "]\n";
       },
-        ir.consts[instr.data].data);
-    } break;
-    case Instruction::Pop: {
-      os << "POP\n";
-    } break;
-    case Instruction::Label: {
-      auto name = std::find_if(ir.labels.begin(),
-        ir.labels.end(),
-        [&instr](auto const &p) { return p.second == instr.data; });
-      os << "LABEL " << instr.data << "[" << name->first << "]\n";
-    } break;
-    case Instruction::Goto: {
-      auto name = std::find_if(ir.labels.begin(),
-        ir.labels.end(),
-        [&instr](auto const &p) { return p.second == instr.data; });
-      os << "GOTO " << instr.data << "[" << name->first << "]\n";
-    } break;
-    case Instruction::JumpFalse: {
-      auto name = std::find_if(ir.labels.begin(),
-        ir.labels.end(),
-        [&instr](auto const &p) { return p.second == instr.data; });
-      os << "JUMP_FALSE " << instr.data << "[" << name->first << "]\n";
-    } break;
-    case Instruction::JumpTrue: {
-      auto name = std::find_if(ir.labels.begin(),
-        ir.labels.end(),
-        [&instr](auto const &p) { return p.second == instr.data; });
-      os << "JUMP_TRUE " << instr.data << "[" << name->first << "]\n";
-    } break;
-    case Instruction::Call:
-      os << "CALL\n";
-      break;
-    case Instruction::Return:
-      os << "RETURN\n";
-      break;
-    case Instruction::Extension:
-      break;
-    }
+      ir.consts[instr.data].data);
+  } break;
+  case Instruction::Pop: {
+    os << "POP\n";
+  } break;
+  case Instruction::Label: {
+    auto name = std::find_if(ir.labels.begin(),
+      ir.labels.end(),
+      [&instr](auto const &p) { return p.second == instr.data; });
+    os << "LABEL " << instr.data << "[" << name->first << "]\n";
+  } break;
+  case Instruction::Goto: {
+    auto name = std::find_if(ir.labels.begin(),
+      ir.labels.end(),
+      [&instr](auto const &p) { return p.second == instr.data; });
+    os << "GOTO " << instr.data << "[" << name->first << "]\n";
+  } break;
+  case Instruction::JumpFalse: {
+    auto name = std::find_if(ir.labels.begin(),
+      ir.labels.end(),
+      [&instr](auto const &p) { return p.second == instr.data; });
+    os << "JUMP_FALSE " << instr.data << "[" << name->first << "]\n";
+  } break;
+  case Instruction::JumpTrue: {
+    auto name = std::find_if(ir.labels.begin(),
+      ir.labels.end(),
+      [&instr](auto const &p) { return p.second == instr.data; });
+    os << "JUMP_TRUE " << instr.data << "[" << name->first << "]\n";
+  } break;
+  case Instruction::Call:
+    os << "CALL " << instr.data << "\n";
+    break;
+  case Instruction::Return:
+    os << "RETURN " << instr.data << "\n";
+    break;
+  case Instruction::Extension:
+    break;
+  }
+}
+
+std::ostream &operator<<(std::ostream &os, ProgramIr const &ir) {
+  for (auto it = ir.prog.begin(); it != ir.prog.end(); ++it) {
+    print_instr(os, it, ir);
   }
 
   if (!ir.func_names.empty()) {
     os << "\n--- Functions ---\n";
     for (size_t i = 0; i < ir.func_names.size(); ++i) {
       os << "FUNC " << i << " [" << ir.func_names[i] << "]:\n";
-      for (auto const &instr : ir.func_bodies[i]) {
-        switch (instr.kind) {
-        case Instruction::Add: os << "  ADD\n"; break;
-        case Instruction::LessThanEq: os << "  LESS_THAN_EQ\n"; break;
-        case Instruction::LoadVar: os << "  LOAD_VAR " << instr.data << "\n"; break;
-        case Instruction::DefineVar: os << "  DEFINE_VAR " << instr.data << "\n"; break;
-        case Instruction::StoreVar: os << "  STORE_VAR " << instr.data << "\n"; break;
-        case Instruction::LoadConst: os << "  LOAD_CONST " << instr.data << "\n"; break;
-        case Instruction::Pop: os << "  POP\n"; break;
-        case Instruction::Label: os << "  LABEL " << instr.data << "\n"; break;
-        case Instruction::Goto: os << "  GOTO " << instr.data << "\n"; break;
-        case Instruction::JumpFalse: os << "  JUMP_FALSE " << instr.data << "\n"; break;
-        case Instruction::JumpTrue: os << "  JUMP_TRUE " << instr.data << "\n"; break;
-        case Instruction::Call: os << "  CALL\n"; break;
-        case Instruction::Return: os << "  RETURN\n"; break;
-        case Instruction::Extension: break;
-        }
+      for (auto it = ir.func_bodies[i].begin(); it != ir.func_bodies[i].end();
+        ++it) {
+        os << "  ";
+        print_instr(os, it, ir);
       }
     }
   }

@@ -1,6 +1,10 @@
-Do
-  if Bar then
-    break
-  end if
-  69
-Loop While baz
+Sub Foo(A as Number, B as Number)
+  Sub Foo(A as Number)
+    return A + 1
+  End Sub
+  return A + B
+End Sub
+
+Foo(2, 3)
+Foo(1)
+
