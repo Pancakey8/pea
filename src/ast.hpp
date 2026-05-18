@@ -87,9 +87,15 @@ struct SubDecl {
   std::vector<StmtPtr> body;
 };
 
+struct ReturnStmt {
+  ExprPtr value;
+};
+struct BreakStmt {};
+struct ContinueStmt {};
+
 struct Stmt {
   std::variant<DimStmt, LetStmt, IfStmt, ForStmt, GotoStmt, DoStmt, ExprStmt,
-               LabelStmt, SubDecl>
+               LabelStmt, SubDecl, ReturnStmt, BreakStmt, ContinueStmt>
       data;
   SourceRange range;
   Stmt(auto &&val, SourceRange range) : data(std::forward<decltype(val)>(val)), range(range) {}

@@ -198,6 +198,20 @@ struct StmtPrinter {
     }
     os << "]}";
   }
+
+  void operator()(const ReturnStmt& s) {
+    os << "{\"type\":\"ReturnStmt\",\"value\":";
+    if (s.value) os << *s.value; else os << "null";
+    os << "}";
+  }
+
+  void operator()(const BreakStmt& s) {
+    os << "{\"type\":\"BreakStmt\"}";
+  }
+
+  void operator()(const ContinueStmt& s) {
+    os << "{\"type\":\"ContinueStmt\"}";
+  }
 };
 
 std::ostream& operator<<(std::ostream& os, const Expr& expr) {

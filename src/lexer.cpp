@@ -156,7 +156,8 @@ std::expected<Token, Error> Lexer::read_ident_or_keyword() {
       {"end", TokenType::KW_End},     {"as", TokenType::KW_As},
       {"mod", TokenType::KW_Mod},     {"and", TokenType::KW_And},
       {"or", TokenType::KW_Or},       {"not", TokenType::KW_Not},
-      {"sub", TokenType::KW_Sub}};
+      {"sub", TokenType::KW_Sub},     {"return", TokenType::KW_Return},
+      {"break", TokenType::KW_Break}, {"continue", TokenType::KW_Continue}};
 
   if (auto it = keywords.find(lower); it != keywords.end()) {
     // Special handling for "end if", "end for", and "end sub"
@@ -266,6 +267,9 @@ std::string to_string(TokenType type) {
     case TokenType::KW_Not: return "KW_Not";
     case TokenType::KW_Sub: return "KW_Sub";
     case TokenType::KW_EndSub: return "KW_EndSub";
+    case TokenType::KW_Return: return "KW_Return";
+    case TokenType::KW_Break: return "KW_Break";
+    case TokenType::KW_Continue: return "KW_Continue";
     case TokenType::Plus: return "Plus";
     case TokenType::Minus: return "Minus";
     case TokenType::Star: return "Star";

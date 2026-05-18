@@ -15,6 +15,9 @@ private:
   Token last;
   std::optional<Token> peeked_token;
 
+  bool in_subroutine = false;
+  bool in_loop = false;
+
   void advance();
   Token peek();
   bool consume(TokenType type);
@@ -35,6 +38,9 @@ private:
   std::expected<StmtPtr, Error> parse_goto();
   std::expected<StmtPtr, Error> parse_do();
   std::expected<StmtPtr, Error> parse_sub();
+  std::expected<StmtPtr, Error> parse_return();
+  std::expected<StmtPtr, Error> parse_break();
+  std::expected<StmtPtr, Error> parse_continue();
 
   int get_precedence(TokenType type);
 };

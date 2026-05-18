@@ -203,6 +203,21 @@ std::expected<StmtPtr, Error> Parser::parse_statement() {
     return parse_do();
   if (current.type == TokenType::KW_Sub)
     return parse_sub();
+  if (current.type == TokenType::KW_Return) {
+    if (!in_subroutine)
+      return std::unexpected(Error{ "Return statement not allowed outside of subroutine", current.start, current.end });
+    return parse_return();
+  }
+  if (current.type == TokenType::KW_Break) {
+    if (!in_loop)
+      return std::unexpected(Error{ "Break statement not allowed outside of loop", current.start, current.end });
+    return parse_break();
+  }
+  if (current.type == TokenType::KW_Continue) {
+    if (!in_loop)
+      return std::unexpected(Error{ "Continue statement not allowed outside of loop", current.start, current.end });
+    return parse_continue();
+  }
 
   // Expression statement
   Token start_t = current;
@@ -401,7 +416,12 @@ std::expected<StmtPtr, Error> Parser::parse_for() {
     return std::unexpected(Error{ "Expected EOL", current.start, current.end });
   while (current.type == TokenType::EOL)
     advance();
+
+  bool old_loop = in_loop;
+  in_loop = true;
   auto body = parse_statements({ TokenType::KW_EndFor });
+  in_loop = old_loop;
+
   if (!body)
     return std::unexpected(body.error());
   if (!consume(TokenType::KW_EndFor))
@@ -447,6 +467,9 @@ std::expected<StmtPtr, Error> Parser::parse_do() {
   std::vector<StmtPtr> body;
   ExprPtr cond = nullptr;
 
+  bool old_loop = in_loop;
+  in_loop = true;
+
   if (while_at_start) {
     advance();
     if (auto cond_parse = parse_expression(); cond_parse) {
@@ -481,6 +504,8 @@ std::expected<StmtPtr, Error> Parser::parse_do() {
     } else
       return std::unexpected(cond_parse.error());
   }
+  in_loop = old_loop;
+
   Token last_t = last;
   if (!consume(TokenType::EOL))
     return std::unexpected(Error{ "Expected EOL", current.start, current.end });
@@ -524,7 +549,11 @@ std::expected<StmtPtr, Error> Parser::parse_sub() {
   while (current.type == TokenType::EOL)
     advance();
 
+  bool old_sub = in_subroutine;
+  in_subroutine = true;
   auto body = parse_statements({ TokenType::KW_EndSub });
+  in_subroutine = old_sub;
+
   if (!body)
     return std::unexpected(body.error());
 
@@ -541,6 +570,53 @@ std::expected<StmtPtr, Error> Parser::parse_sub() {
 
   return std::make_unique<Stmt>(SubDecl{ name, std::move(params), std::move(*body) },
     SourceRange{ start_t.start, last_t.end });
+}
+
+std::expected<StmtPtr, Error> Parser::parse_return() {
+  Token start_t = current;
+  advance(); // return
+  ExprPtr val = nullptr;
+  if (current.type != TokenType::EOL && current.type != TokenType::EndOfFile) {
+    auto e = parse_expression();
+    if (!e)
+      return std::unexpected(e.error());
+    val = std::move(*e);
+  }
+  Token last_t = current;
+  if (!consume(TokenType::EOL))
+    return std::unexpected(Error{ "Expected EOL", current.start, current.end });
+  while (current.type == TokenType::EOL) {
+    last_t = current;
+    advance();
+  }
+  return std::make_unique<Stmt>(ReturnStmt{ std::move(val) },
+    SourceRange{ start_t.start, last_t.end });
+}
+
+std::expected<StmtPtr, Error> Parser::parse_break() {
+  Token start_t = current;
+  advance(); // break
+  Token last_t = current;
+  if (!consume(TokenType::EOL))
+    return std::unexpected(Error{ "Expected EOL", current.start, current.end });
+  while (current.type == TokenType::EOL) {
+    last_t = current;
+    advance();
+  }
+  return std::make_unique<Stmt>(BreakStmt{}, SourceRange{ start_t.start, last_t.end });
+}
+
+std::expected<StmtPtr, Error> Parser::parse_continue() {
+  Token start_t = current;
+  advance(); // continue
+  Token last_t = current;
+  if (!consume(TokenType::EOL))
+    return std::unexpected(Error{ "Expected EOL", current.start, current.end });
+  while (current.type == TokenType::EOL) {
+    last_t = current;
+    advance();
+  }
+  return std::make_unique<Stmt>(ContinueStmt{}, SourceRange{ start_t.start, last_t.end });
 }
 
 std::expected<std::vector<StmtPtr>, Error> Parser::parse_statements(
