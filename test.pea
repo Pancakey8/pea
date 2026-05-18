@@ -1,7 +1,6 @@
-For i = 1 To 10
-  1 + 1
-End For
-
-For i = 0 To 10 Step 5
-  1 + 1
-End For
+Do
+  if Bar then
+    break
+  end if
+  69
+Loop While baz

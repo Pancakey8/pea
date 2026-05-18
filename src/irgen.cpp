@@ -183,10 +183,6 @@ std::expected<void, Error> IrGen::emit(Stmt const &stmt) {
       return {};
     },
     [&](ReturnStmt const &s) -> std::expected<void, Error> {
-      if (s.value) {
-        if (auto res = emit(*s.value); !res)
-          return std::unexpected(res.error());
-      }
       return {};
     },
     [&](BreakStmt const &s) -> std::expected<void, Error> {
