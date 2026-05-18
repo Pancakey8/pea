@@ -201,6 +201,8 @@ std::expected<StmtPtr, Error> Parser::parse_statement() {
     return parse_goto();
   if (current.type == TokenType::KW_Do)
     return parse_do();
+  if (current.type == TokenType::KW_Sub)
+    return parse_sub();
 
   // Expression statement
   Token start_t = current;
@@ -488,6 +490,56 @@ std::expected<StmtPtr, Error> Parser::parse_do() {
   }
   return std::make_unique<Stmt>(
     DoStmt{ std::move(body), std::move(cond), while_at_start },
+    SourceRange{ start_t.start, last_t.end });
+}
+
+std::expected<StmtPtr, Error> Parser::parse_sub() {
+  Token start_t = current;
+  advance(); // sub
+  std::string name = current.text;
+  if (!consume(TokenType::Ident))
+    return std::unexpected(Error{ "Expected subroutine name", current.start, current.end });
+  if (!consume(TokenType::LParen))
+    return std::unexpected(Error{ "Expected '('", current.start, current.end });
+
+  std::vector<Parameter> params;
+  while (current.type == TokenType::Ident) {
+    std::string p_name = current.text;
+    advance();
+    if (!consume(TokenType::KW_As))
+      return std::unexpected(Error{ "Expected 'as'", current.start, current.end });
+    std::string p_type = current.text;
+    if (!consume(TokenType::Ident))
+      return std::unexpected(Error{ "Expected parameter type", current.start, current.end });
+    params.push_back({ p_name, p_type });
+    if (!consume(TokenType::Comma))
+      break;
+  }
+
+  if (!consume(TokenType::RParen))
+    return std::unexpected(Error{ "Expected ')'", current.start, current.end });
+
+  if (!consume(TokenType::EOL))
+    return std::unexpected(Error{ "Expected EOL", current.start, current.end });
+  while (current.type == TokenType::EOL)
+    advance();
+
+  auto body = parse_statements({ TokenType::KW_EndSub });
+  if (!body)
+    return std::unexpected(body.error());
+
+  if (!consume(TokenType::KW_EndSub))
+    return std::unexpected(Error{ "Expected 'end sub'", current.start, current.end });
+
+  Token last_t = current;
+  if (!consume(TokenType::EOL))
+    return std::unexpected(Error{ "Expected EOL", current.start, current.end });
+  while (current.type == TokenType::EOL) {
+    last_t = current;
+    advance();
+  }
+
+  return std::make_unique<Stmt>(SubDecl{ name, std::move(params), std::move(*body) },
     SourceRange{ start_t.start, last_t.end });
 }
 

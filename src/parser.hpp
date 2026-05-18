@@ -34,6 +34,7 @@ private:
   std::expected<StmtPtr, Error> parse_for();
   std::expected<StmtPtr, Error> parse_goto();
   std::expected<StmtPtr, Error> parse_do();
+  std::expected<StmtPtr, Error> parse_sub();
 
   int get_precedence(TokenType type);
 };

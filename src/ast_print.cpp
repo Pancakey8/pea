@@ -178,6 +178,26 @@ struct StmtPrinter {
     op_json_str(os, s.name);
     os << "}";
   }
+
+  void operator()(const SubDecl& s) {
+    os << "{\"type\":\"SubDecl\",\"name\":";
+    op_json_str(os, s.name);
+    os << ",\"params\":[";
+    for (size_t i = 0; i < s.params.size(); ++i) {
+      os << "{\"name\":";
+      op_json_str(os, s.params[i].name);
+      os << ",\"type\":";
+      op_json_str(os, s.params[i].type);
+      os << "}";
+      if (i < s.params.size() - 1) os << ",";
+    }
+    os << "],\"body\":[";
+    for (size_t i = 0; i < s.body.size(); ++i) {
+      if (s.body[i]) os << *s.body[i]; else os << "null";
+      if (i < s.body.size() - 1) os << ",";
+    }
+    os << "]}";
+  }
 };
 
 std::ostream& operator<<(std::ostream& os, const Expr& expr) {

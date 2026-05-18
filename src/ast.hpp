@@ -77,9 +77,19 @@ struct LabelStmt {
   std::string name;
 };
 
+struct Parameter {
+  std::string name;
+  std::string type;
+};
+struct SubDecl {
+  std::string name;
+  std::vector<Parameter> params;
+  std::vector<StmtPtr> body;
+};
+
 struct Stmt {
   std::variant<DimStmt, LetStmt, IfStmt, ForStmt, GotoStmt, DoStmt, ExprStmt,
-               LabelStmt>
+               LabelStmt, SubDecl>
       data;
   SourceRange range;
   Stmt(auto &&val, SourceRange range) : data(std::forward<decltype(val)>(val)), range(range) {}

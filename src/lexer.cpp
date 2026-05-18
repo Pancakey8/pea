@@ -155,10 +155,11 @@ std::expected<Token, Error> Lexer::read_ident_or_keyword() {
       {"loop", TokenType::KW_Loop},   {"goto", TokenType::KW_Goto},
       {"end", TokenType::KW_End},     {"as", TokenType::KW_As},
       {"mod", TokenType::KW_Mod},     {"and", TokenType::KW_And},
-      {"or", TokenType::KW_Or},       {"not", TokenType::KW_Not}};
+      {"or", TokenType::KW_Or},       {"not", TokenType::KW_Not},
+      {"sub", TokenType::KW_Sub}};
 
   if (auto it = keywords.find(lower); it != keywords.end()) {
-    // Special handling for "end if" and "end for"
+    // Special handling for "end if", "end for", and "end sub"
     if (it->second == TokenType::KW_End) {
       size_t save_pos = pos;
       int save_col = col;
@@ -171,6 +172,10 @@ std::expected<Token, Error> Lexer::read_ident_or_keyword() {
         pos += 3;
         col += 3;
         return Token{TokenType::KW_EndFor, "end for", 0, 0, {line, start_col}, {line, col}};
+      } else if (pos + 3 <= source.size() && to_lower(source.substr(pos, 3)) == "sub") {
+        pos += 3;
+        col += 3;
+        return Token{TokenType::KW_EndSub, "end sub", 0, 0, {line, start_col}, {line, col}};
       }
       pos = save_pos;
       col = save_col;
@@ -259,6 +264,8 @@ std::string to_string(TokenType type) {
     case TokenType::KW_And: return "KW_And";
     case TokenType::KW_Or: return "KW_Or";
     case TokenType::KW_Not: return "KW_Not";
+    case TokenType::KW_Sub: return "KW_Sub";
+    case TokenType::KW_EndSub: return "KW_EndSub";
     case TokenType::Plus: return "Plus";
     case TokenType::Minus: return "Minus";
     case TokenType::Star: return "Star";
