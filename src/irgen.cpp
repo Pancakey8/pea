@@ -178,6 +178,9 @@ std::expected<void, Error> IrGen::emit(Stmt const &stmt) {
       auto l = label_register(s.name);
       prog.push_back({ Instruction::Label, l });
       return {};
+    },
+    [&](SubDecl const &s) -> std::expected<void, Error> {
+      return {};
     }
   };
   return std::visit(vtor, stmt.data);
