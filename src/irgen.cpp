@@ -19,6 +19,8 @@ std::expected<ProgramIr, Error> IrGen::generate(Program const &prog) {
     std::move(consts),
     std::move(labels),
     std::move(types),
+    std::move(func_names),
+    std::move(func_bodies),
   };
 }
 
@@ -198,9 +200,33 @@ std::expected<void, Error> IrGen::emit(Stmt const &stmt) {
       return {};
     },
     [&](SubDecl const &s) -> std::expected<void, Error> {
+      std::uint16_t id = func_next++;
+      func_names.push_back(s.name);
+
+      std::vector<Instruction> main_prog = std::move(prog);
+      prog.clear();
+
+      for (auto const &stmt : s.body) {
+        if (auto res = emit(*stmt); !res) {
+          prog = std::move(main_prog);
+          return std::unexpected(res.error());
+        }
+      }
+
+      func_bodies.push_back(std::move(prog));
+      prog = std::move(main_prog);
+
+      auto c = const_register(PeaValue{ PeaFuncPtr{ id } });
+      prog.push_back({ Instruction::LoadConst, c });
+
       return {};
     },
     [&](ReturnStmt const &s) -> std::expected<void, Error> {
+      if (s.value) {
+        if (auto res = emit(*s.value); !res)
+          return std::unexpected(res.error());
+      }
+      prog.push_back({ Instruction::Return, 0 });
       return {};
     },
     [&](BreakStmt const &s) -> std::expected<void, Error> {
@@ -299,7 +325,16 @@ std::expected<void, Error> IrGen::emit(Expr const &expr) {
 
       return {};
     },
-    [&](Call const &e) -> std::expected<void, Error> { return {}; }
+    [&](Call const &e) -> std::expected<void, Error> {
+      for (auto const &arg : e.args) {
+        if (auto res = emit(*arg); !res)
+          return std::unexpected(res.error());
+      }
+      if (auto res = emit(*e.callee); !res)
+        return std::unexpected(res.error());
+      prog.push_back({ Instruction::Call, 0 });
+      return {};
+    }
   };
   return std::visit(vtor, expr.data);
 }
@@ -387,7 +422,14 @@ std::ostream &operator<<(std::ostream &os, ProgramIr const &ir) {
     } break;
     case Instruction::LoadConst: {
       os << "LOAD_CONST " << instr.data << "[";
-      std::visit([&os](auto const &v) { os << v.val << "]\n"; },
+      std::visit([&os](auto const &v) {
+        using T = std::decay_t<decltype(v)>;
+        if constexpr (std::is_same_v<T, PeaNumber>) os << v.val;
+        else if constexpr (std::is_same_v<T, PeaChar>) os << v.val;
+        else if constexpr (std::is_same_v<T, PeaString>) os << v.val;
+        else if constexpr (std::is_same_v<T, PeaFuncPtr>) os << "func_ptr(" << v.id << ")";
+        os << "]\n";
+      },
         ir.consts[instr.data].data);
     } break;
     case Instruction::Pop: {
@@ -417,8 +459,39 @@ std::ostream &operator<<(std::ostream &os, ProgramIr const &ir) {
         [&instr](auto const &p) { return p.second == instr.data; });
       os << "JUMP_TRUE " << instr.data << "[" << name->first << "]\n";
     } break;
+    case Instruction::Call:
+      os << "CALL\n";
+      break;
+    case Instruction::Return:
+      os << "RETURN\n";
+      break;
     case Instruction::Extension:
       break;
+    }
+  }
+
+  if (!ir.func_names.empty()) {
+    os << "\n--- Functions ---\n";
+    for (size_t i = 0; i < ir.func_names.size(); ++i) {
+      os << "FUNC " << i << " [" << ir.func_names[i] << "]:\n";
+      for (auto const &instr : ir.func_bodies[i]) {
+        switch (instr.kind) {
+        case Instruction::Add: os << "  ADD\n"; break;
+        case Instruction::LessThanEq: os << "  LESS_THAN_EQ\n"; break;
+        case Instruction::LoadVar: os << "  LOAD_VAR " << instr.data << "\n"; break;
+        case Instruction::DefineVar: os << "  DEFINE_VAR " << instr.data << "\n"; break;
+        case Instruction::StoreVar: os << "  STORE_VAR " << instr.data << "\n"; break;
+        case Instruction::LoadConst: os << "  LOAD_CONST " << instr.data << "\n"; break;
+        case Instruction::Pop: os << "  POP\n"; break;
+        case Instruction::Label: os << "  LABEL " << instr.data << "\n"; break;
+        case Instruction::Goto: os << "  GOTO " << instr.data << "\n"; break;
+        case Instruction::JumpFalse: os << "  JUMP_FALSE " << instr.data << "\n"; break;
+        case Instruction::JumpTrue: os << "  JUMP_TRUE " << instr.data << "\n"; break;
+        case Instruction::Call: os << "  CALL\n"; break;
+        case Instruction::Return: os << "  RETURN\n"; break;
+        case Instruction::Extension: break;
+        }
+      }
     }
   }
 

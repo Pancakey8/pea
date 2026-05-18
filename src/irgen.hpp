@@ -17,9 +17,12 @@ struct PeaChar {
 struct PeaString {
   std::string val;
 };
+struct PeaFuncPtr {
+  std::uint16_t id;
+};
 
 struct PeaValue {
-  std::variant<PeaNumber, PeaChar, PeaString> data;
+  std::variant<PeaNumber, PeaChar, PeaString, PeaFuncPtr> data;
 };
 
 struct Instruction {
@@ -35,6 +38,8 @@ struct Instruction {
     Goto,
     JumpFalse,
     JumpTrue,
+    Call,
+    Return,
     Extension = 0xFF
   } kind;
   std::uint16_t data;
@@ -46,6 +51,8 @@ struct ProgramIr {
   std::vector<PeaValue> consts;
   std::unordered_map<std::string, std::uint16_t> labels;
   std::unordered_map<std::string, std::uint16_t> types;
+  std::vector<std::string> func_names;
+  std::vector<std::vector<Instruction>> func_bodies;
 };
 
 std::ostream &operator<<(std::ostream &os, ProgramIr const &ir);
@@ -85,4 +92,8 @@ private:
   std::optional<std::uint16_t> resolve_type(std::string const &name);
 
   std::vector<LoopLabels> loop_stack{};
+
+  std::vector<std::string> func_names{};
+  std::vector<std::vector<Instruction>> func_bodies{};
+  std::uint16_t func_next{};
 };
