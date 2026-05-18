@@ -107,13 +107,18 @@ std::expected<void, Error> IrGen::emit(Stmt const &stmt) {
 
       prog.push_back({ Instruction::StoreVar, var });
       auto l_start = label_get();
+      auto l_continue = label_get();
+      auto l_end = label_get();
       prog.push_back({ Instruction::Label, l_start });
 
+      loop_stack.push_back({ l_continue, l_end });
       for (auto const &stmt : s.body) {
         if (auto res = emit(*stmt); !res)
           return std::unexpected(res.error());
       }
+      loop_stack.pop_back();
 
+      prog.push_back({ Instruction::Label, l_continue });
       if (s.step) {
         prog.push_back({ Instruction::LoadVar, var });
         if (auto res = emit(*s.step); !res)
@@ -133,6 +138,7 @@ std::expected<void, Error> IrGen::emit(Stmt const &stmt) {
         return std::unexpected(res.error());
       prog.push_back({ Instruction::LessThanEq });
       prog.push_back({ Instruction::JumpTrue, l_start });
+      prog.push_back({ Instruction::Label, l_end });
 
       return {};
     },
@@ -144,27 +150,39 @@ std::expected<void, Error> IrGen::emit(Stmt const &stmt) {
     [&](DoStmt const &s) -> std::expected<void, Error> {
       if (s.while_at_start) {
         auto l_start = label_get();
+        auto l_end = label_get();
         prog.push_back({ Instruction::Label, l_start });
         if (auto res = emit(*s.condition); !res)
           return std::unexpected(res.error());
-        auto l_end = label_get();
         prog.push_back({ Instruction::JumpFalse, l_end });
+        
+        loop_stack.push_back({ l_start, l_end });
         for (auto const &stmt : s.body) {
           if (auto res = emit(*stmt); !res)
             return std::unexpected(res.error());
         }
+        loop_stack.pop_back();
+        
         prog.push_back({ Instruction::Goto, l_start });
         prog.push_back({ Instruction::Label, l_end });
       } else {
         auto l_start = label_get();
+        auto l_continue = label_get();
+        auto l_end = label_get();
         prog.push_back({ Instruction::Label, l_start });
+        
+        loop_stack.push_back({ l_continue, l_end });
         for (auto const &stmt : s.body) {
           if (auto res = emit(*stmt); !res)
             return std::unexpected(res.error());
         }
+        loop_stack.pop_back();
+        
+        prog.push_back({ Instruction::Label, l_continue });
         if (auto res = emit(*s.condition); !res)
           return std::unexpected(res.error());
         prog.push_back({ Instruction::JumpTrue, l_start });
+        prog.push_back({ Instruction::Label, l_end });
       }
       return {};
     },
@@ -186,9 +204,11 @@ std::expected<void, Error> IrGen::emit(Stmt const &stmt) {
       return {};
     },
     [&](BreakStmt const &s) -> std::expected<void, Error> {
+      prog.push_back({ Instruction::Goto, loop_stack.back().break_lbl });
       return {};
     },
     [&](ContinueStmt const &s) -> std::expected<void, Error> {
+      prog.push_back({ Instruction::Goto, loop_stack.back().continue_lbl });
       return {};
     }
   };

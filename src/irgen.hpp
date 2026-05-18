@@ -50,6 +50,11 @@ struct ProgramIr {
 
 std::ostream &operator<<(std::ostream &os, ProgramIr const &ir);
 
+struct LoopLabels {
+  std::uint16_t continue_lbl;
+  std::uint16_t break_lbl;
+};
+
 class IrGen {
 public:
   std::expected<ProgramIr, Error> generate(Program const &prog);
@@ -78,4 +83,6 @@ private:
     { "number", 0 }, { "char", 1 }, { "string", 2}
   };
   std::optional<std::uint16_t> resolve_type(std::string const &name);
+
+  std::vector<LoopLabels> loop_stack{};
 };
