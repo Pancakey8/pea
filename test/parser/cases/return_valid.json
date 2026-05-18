@@ -1,0 +1,1 @@
+{"statements":[{"type":"SubDecl","name":"my_sub","params":[],"body":[{"type":"ReturnStmt","value":{"type":"Literal","value":1}}]}]}

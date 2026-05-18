@@ -1,0 +1,1 @@
+{"statements":[{"type":"ForStmt","var":"i","start":{"type":"Literal","value":1},"end":{"type":"Literal","value":10},"step":null,"body":[{"type":"BreakStmt"}]}]}

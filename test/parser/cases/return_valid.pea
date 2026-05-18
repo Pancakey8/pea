@@ -1,0 +1,3 @@
+sub my_sub()
+  return 1
+end sub

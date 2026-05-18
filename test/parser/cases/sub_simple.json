@@ -1,0 +1,1 @@
+{"statements":[{"type":"SubDecl","name":"hello","params":[],"body":[{"type":"ExprStmt","expr":{"type":"Call","callee":{"type":"Variable","name":"print"},"args":[{"type":"Literal","value":"hi"}]}}]}]}

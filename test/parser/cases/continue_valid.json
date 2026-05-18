@@ -1,0 +1,1 @@
+{"statements":[{"type":"DoStmt","body":[{"type":"ContinueStmt"}],"condition":{"type":"BinaryOp","op":"Less","left":{"type":"Variable","name":"x"},"right":{"type":"Literal","value":10}},"while_at_start":false}]}
