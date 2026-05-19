@@ -2,8 +2,6 @@
 #include "ast.hpp"
 #include "lexer.hpp"
 #include <iostream>
-#include <iterator>
-#include <print>
 #include <ranges>
 #include <utility>
 
@@ -140,7 +138,7 @@ std::expected<void, Error> IrGen::emit(Stmt const &stmt) {
       prog.push_back({ Instruction::LoadVar, var });
       if (auto res = emit(*s.end); !res)
         return std::unexpected(res.error());
-      prog.push_back({ Instruction::LessThanEq });
+      prog.push_back({ Instruction::Lte });
       prog.push_back({ Instruction::JumpTrue, l_start });
       prog.push_back({ Instruction::Label, l_end });
 
@@ -289,37 +287,52 @@ std::expected<void, Error> IrGen::emit(Expr const &expr) {
 
       switch (e.op) {
       case TokenType::KW_Mod:
+        prog.push_back({ Instruction::Mod });
         break;
       case TokenType::KW_And:
+        prog.push_back({ Instruction::And });
         break;
       case TokenType::KW_Or:
+        prog.push_back({ Instruction::Or });
         break;
       case TokenType::Plus:
         prog.push_back({ Instruction::Add });
         break;
       case TokenType::Minus:
+        prog.push_back({ Instruction::Sub });
         break;
       case TokenType::Star:
+        prog.push_back({ Instruction::Mul });
         break;
       case TokenType::Slash:
+        prog.push_back({ Instruction::Div });
         break;
       case TokenType::Caret:
+        prog.push_back({ Instruction::Pow });
         break;
       case TokenType::Backslash:
+        prog.push_back({ Instruction::IDiv });
         break;
       case TokenType::Eq:
+        prog.push_back({ Instruction::Eq });
         break;
       case TokenType::Neq:
+        prog.push_back({ Instruction::Neq });
         break;
       case TokenType::Less:
+        prog.push_back({ Instruction::Lt });
         break;
       case TokenType::Great:
+        prog.push_back({ Instruction::Gt });
         break;
       case TokenType::Lteq:
+        prog.push_back({ Instruction::Lte });
         break;
       case TokenType::Gteq:
+        prog.push_back({ Instruction::Gte });
         break;
       case TokenType::Amp:
+        prog.push_back({ Instruction::Concat });
         break;
       default:
         std::unreachable();
@@ -333,10 +346,13 @@ std::expected<void, Error> IrGen::emit(Expr const &expr) {
 
       switch (e.op) {
       case TokenType::Plus:
+        prog.push_back({ Instruction::Pos });
         break;
       case TokenType::Minus:
+        prog.push_back({ Instruction::Neg });
         break;
       case TokenType::KW_Not:
+        prog.push_back({ Instruction::Not });
         break;
       default:
         std::unreachable();
@@ -413,8 +429,59 @@ void print_instr(std::ostream &os, It &it, ProgramIr const &ir) {
   case Instruction::Add:
     os << "ADD\n";
     break;
-  case Instruction::LessThanEq:
-    os << "LESS_THAN_EQ\n";
+  case Instruction::Sub:
+    os << "SUB\n";
+    break;
+  case Instruction::Mul:
+    os << "MUL\n";
+    break;
+  case Instruction::Div:
+    os << "DIV\n";
+    break;
+  case Instruction::IDiv:
+    os << "IDIV\n";
+    break;
+  case Instruction::Pow:
+    os << "POW\n";
+    break;
+  case Instruction::Mod:
+    os << "MOD\n";
+    break;
+  case Instruction::And:
+    os << "AND\n";
+    break;
+  case Instruction::Or:
+    os << "OR\n";
+    break;
+  case Instruction::Eq:
+    os << "EQ\n";
+    break;
+  case Instruction::Neq:
+    os << "NEQ\n";
+    break;
+  case Instruction::Lt:
+    os << "LT\n";
+    break;
+  case Instruction::Gt:
+    os << "GT\n";
+    break;
+  case Instruction::Lte:
+    os << "LTE\n";
+    break;
+  case Instruction::Gte:
+    os << "GTE\n";
+    break;
+  case Instruction::Concat:
+    os << "CONCAT\n";
+    break;
+  case Instruction::Pos:
+    os << "POS\n";
+    break;
+  case Instruction::Neg:
+    os << "NEG\n";
+    break;
+  case Instruction::Not:
+    os << "NOT\n";
     break;
   case Instruction::LoadVar: {
     auto name = std::find_if(ir.vars.begin(),
