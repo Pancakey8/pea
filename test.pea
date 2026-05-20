@@ -2,3 +2,6 @@ Sub Foo(X as Number, Y as String)
   return Y & X
 End Sub
 
+Sub Bar(X, Y)
+  Let Z = X + Y
+End Sub

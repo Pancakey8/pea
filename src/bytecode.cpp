@@ -170,9 +170,9 @@ void BytecodeEmitter::emit_body(
       auto dim_ext = *(++it);
       emit_le(out, out.end(), static_cast<std::uint16_t>(dim_ext.data));
       if (it + 1 != instrs.end() && (it + 1)->kind == Instruction::Extension) {
-	auto type_ext = *(++it);
-	emit_le(out, out.end(), static_cast<std::uint16_t>(type_ext.data));
-	out[op] = static_cast<std::uint8_t>(OpCode::DefineVarT);
+        auto type_ext = *(++it);
+        emit_le(out, out.end(), static_cast<std::uint16_t>(type_ext.data));
+        out[op] = static_cast<std::uint8_t>(OpCode::DefineVarT);
       }
     } break;
     case Instruction::StoreVar:
@@ -214,8 +214,9 @@ void BytecodeEmitter::emit_body(
       emit_le(out, out.end(), static_cast<std::uint16_t>(instr.data));
       break;
     case Instruction::Return:
-      // TODO: `return` empty breaks our assumptions
-      // Convert to a `return null` implicit
+      if (instr.data == 0)
+        out.push_back(static_cast<std::uint8_t>(OpCode::LoadNull));
+      out.push_back(static_cast<std::uint8_t>(OpCode::Return));
       break;
     case Instruction::Extension:
       assert(false && "Extensions are pulled earlier, can't reach");

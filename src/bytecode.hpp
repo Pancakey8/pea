@@ -30,11 +30,13 @@ enum class OpCode : std::uint8_t {
   DefineVarT,
   StoreVar,
   LoadConst,
+  LoadNull,
   Pop,
   Goto,
   JumpFalse,
   JumpTrue,
   Call,
+  Return,
   Extension = 0xFF
 };
 
