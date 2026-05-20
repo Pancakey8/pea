@@ -566,13 +566,14 @@ std::expected<StmtPtr, Error> Parser::parse_sub() {
   while (current.type == TokenType::Ident) {
     std::string p_name = current.text;
     advance();
-    if (!consume(TokenType::KW_As))
-      return std::unexpected(
-        Error{ "Expected 'as'", current.start, current.end });
-    std::string p_type = current.text;
-    if (!consume(TokenType::Ident))
-      return std::unexpected(
-        Error{ "Expected parameter type", current.start, current.end });
+    std::optional<std::string> p_type{};
+    if (consume(TokenType::KW_As)) {
+      if (current.type != TokenType::Ident)
+	return std::unexpected(
+			       Error{ "Expected parameter type", current.start, current.end });
+      p_type = current.text;
+      advance();
+    }
     params.push_back({ p_name, p_type });
     if (!consume(TokenType::Comma))
       break;

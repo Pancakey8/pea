@@ -228,17 +228,18 @@ std::expected<void, Error> IrGen::emit(Stmt const &stmt) {
       prog.clear();
 
       for (auto const &param : s.params | std::ranges::views::reverse) {
-        auto type = resolve_type(param.type);
-        if (!type)
-          return std::unexpected(
-            Error{ std::format("Unknown type '{}'", param.type),
-              stmt.range.start.line,
-              stmt.range.start.col });
-
         auto var = var_register(param.name);
         prog.push_back({ Instruction::DefineVar, var });
         prog.push_back({ Instruction::Extension, 0 });
-        prog.push_back({ Instruction::Extension, *type });
+        if (param.type) {
+          auto type = resolve_type(*param.type);
+          if (!type)
+            return std::unexpected(
+              Error{ std::format("Unknown type '{}'", *param.type),
+                stmt.range.start.line,
+                stmt.range.start.col });
+          prog.push_back({ Instruction::Extension, *type });
+        }
         prog.push_back({ Instruction::StoreVar, var });
       }
 

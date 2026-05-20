@@ -81,7 +81,7 @@ struct LabelStmt {
 
 struct Parameter {
   std::string name;
-  std::string type;
+  std::optional<std::string> type;
 };
 struct SubDecl {
   std::string name;
