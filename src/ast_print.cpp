@@ -94,7 +94,11 @@ struct StmtPrinter {
       if (s.dims[i]) os << *s.dims[i]; else os << "null";
       if (i < s.dims.size() - 1) os << ",";
     }
-    os << "]}";
+    os << "],\"type\":";
+    if(s.type) os<<"\"" << *s.type << "\""; else os << "null";
+    os<<",\"init\":";
+    if(s.init) os<<*s.init.value(); else os<<"null";
+    os << "}";
   }
 
   void operator()(const LetStmt& s) {

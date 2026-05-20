@@ -1,6 +1,8 @@
 #include "bytecode.hpp"
 #include "irgen.hpp"
 #include <bit>
+#include <cassert>
+#include <print>
 #include <ranges>
 
 template <class... Fs> struct Overloaded : Fs... {
@@ -161,10 +163,18 @@ void BytecodeEmitter::emit_body(
       out.push_back(static_cast<std::uint8_t>(OpCode::LoadVar));
       emit_le(out, out.end(), static_cast<std::uint16_t>(instr.data));
       break;
-    case Instruction::DefineVar:
+    case Instruction::DefineVar: {
+      auto op = out.size();
       out.push_back(static_cast<std::uint8_t>(OpCode::DefineVar));
       emit_le(out, out.end(), static_cast<std::uint16_t>(instr.data));
-      break;
+      auto dim_ext = *(++it);
+      emit_le(out, out.end(), static_cast<std::uint16_t>(dim_ext.data));
+      if (it + 1 != instrs.end() && (it + 1)->kind == Instruction::Extension) {
+	auto type_ext = *(++it);
+	emit_le(out, out.end(), static_cast<std::uint16_t>(type_ext.data));
+	out[op] = static_cast<std::uint8_t>(OpCode::DefineVarT);
+      }
+    } break;
     case Instruction::StoreVar:
       out.push_back(static_cast<std::uint8_t>(OpCode::StoreVar));
       emit_le(out, out.end(), static_cast<std::uint16_t>(instr.data));
@@ -208,9 +218,7 @@ void BytecodeEmitter::emit_body(
       // Convert to a `return null` implicit
       break;
     case Instruction::Extension:
-      out.push_back(static_cast<std::uint8_t>(OpCode::Extension));
-      emit_le(out, out.end(), static_cast<std::uint16_t>(instr.data));
-      break;
+      assert(false && "Extensions are pulled earlier, can't reach");
     }
   }
 
@@ -237,7 +245,6 @@ void BytecodeEmitter::emit_subs(std::vector<std::uint8_t> &out) {
   write_le(out, sub_count, static_cast<std::uint16_t>(prog.func_bodies.size()));
 }
 
-
 void BytecodeEmitter::resolve_ids(std::vector<std::uint8_t> &bytes) {
   for (auto const &res : resolve_consts) {
     std::uint16_t id = (bytes[res + 1] << 8) | bytes[res];
@@ -251,8 +258,9 @@ void BytecodeEmitter::resolve_ids(std::vector<std::uint8_t> &bytes) {
 
   for (auto const &res : resolve_labels) {
     std::uint16_t id = (bytes[res + 1] << 8) | bytes[res];
-    int off = labels[id] - res;
+    auto off =
+      static_cast<std::int32_t>(static_cast<std::ptrdiff_t>(labels[id]) -
+                                static_cast<std::ptrdiff_t>(res) + 1);
     write_le(bytes, res, static_cast<std::int32_t>(off));
   }
 }
-

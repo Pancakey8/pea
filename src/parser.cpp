@@ -252,25 +252,43 @@ std::expected<StmtPtr, Error> Parser::parse_dim() {
   if (!consume(TokenType::Ident))
     return std::unexpected(
       Error{ "Expected identifier", current.start, current.end });
-  if (!consume(TokenType::LParen))
-    return std::unexpected(Error{ "Expected '('", current.start, current.end });
 
-  std::vector<ExprPtr> dims;
-  if (current.type != TokenType::RParen) {
-    do {
-      auto arg = parse_expression();
-      if (!arg)
-        return std::unexpected(arg.error());
-      dims.push_back(std::move(*arg));
-      if (current.type == TokenType::Comma)
-        advance();
-      else
-        break;
-    } while (true);
+  std::vector<ExprPtr> dims{};
+  if (consume(TokenType::LParen)) {
+    if (current.type != TokenType::RParen) {
+      do {
+        auto arg = parse_expression();
+        if (!arg)
+          return std::unexpected(arg.error());
+        dims.push_back(std::move(*arg));
+        if (current.type == TokenType::Comma)
+          advance();
+        else
+          break;
+      } while (true);
+    }
+
+    if (!consume(TokenType::RParen))
+      return std::unexpected(
+        Error{ "Expected ')' after dimensions", current.start, current.end });
   }
-  if (!consume(TokenType::RParen))
-    return std::unexpected(
-      Error{ "Expected ')' after dimensions", current.start, current.end });
+
+  std::optional<std::string> type{};
+  if (consume(TokenType::KW_As)) {
+    if (current.type != TokenType::Ident)
+      return std::unexpected(
+        Error{ "Expected type after 'as'", current.start, current.end });
+    type = current.text;
+    advance();
+  }
+
+  std::optional<ExprPtr> init{};
+  if (consume(TokenType::Eq)) {
+    auto val = parse_expression();
+    if (!val)
+      return std::unexpected(val.error());
+    init = std::move(*val);
+  }
 
   Token last_t = current;
   if (!consume(TokenType::EOL))
@@ -279,7 +297,8 @@ std::expected<StmtPtr, Error> Parser::parse_dim() {
     last_t = current;
     advance();
   }
-  return std::make_unique<Stmt>(DimStmt{ name, std::move(dims) },
+  return std::make_unique<Stmt>(
+    DimStmt{ name, std::move(dims), std::move(type), std::move(init) },
     SourceRange{ start_t.start, last_t.end });
 }
 

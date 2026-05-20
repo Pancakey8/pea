@@ -1,1 +1,4 @@
-'a'
+Sub Foo(X as Number, Y as String)
+  return Y & X
+End Sub
+

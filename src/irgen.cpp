@@ -1,6 +1,7 @@
 #include "irgen.hpp"
 #include "ast.hpp"
 #include "lexer.hpp"
+#include <format>
 #include <iostream>
 #include <ranges>
 #include <utility>
@@ -45,6 +46,24 @@ std::expected<void, Error> IrGen::emit(Stmt const &stmt) {
       prog.push_back({ Instruction::DefineVar, var });
       prog.push_back(
         { Instruction::Extension, static_cast<std::uint16_t>(s.dims.size()) });
+
+      if (s.type) {
+        auto type = resolve_type(*s.type);
+        if (!type)
+          return std::unexpected(
+            Error{ std::format("Unknown type '{}'", *s.type),
+              stmt.range.start,
+              stmt.range.end });
+        prog.push_back({ Instruction::Extension, *type });
+      }
+
+      if (s.init) {
+        if (auto res = emit(*s.init.value()); !res)
+          return std::unexpected(res.error());
+
+        auto var = var_register(s.name);
+        prog.push_back({ Instruction::StoreVar, var });
+      }
 
       return {};
     },
@@ -218,6 +237,7 @@ std::expected<void, Error> IrGen::emit(Stmt const &stmt) {
 
         auto var = var_register(param.name);
         prog.push_back({ Instruction::DefineVar, var });
+        prog.push_back({ Instruction::Extension, 0 });
         prog.push_back({ Instruction::Extension, *type });
         prog.push_back({ Instruction::StoreVar, var });
       }
@@ -493,8 +513,17 @@ void print_instr(std::ostream &os, It &it, ProgramIr const &ir) {
     auto name = std::find_if(ir.vars.begin(),
       ir.vars.end(),
       [&instr](auto const &p) { return p.second == instr.data; });
-    auto const &ext = *(++it);
-    os << "DEFINE_VAR " << instr.data << "[" << name->first << "], " << ext.data << "\n";
+    auto const &dim_ext = *(++it);
+    os << "DEFINE_VAR " << instr.data << "[" << name->first << "], "
+       << dim_ext.data;
+    if ((it + 1)->kind == Instruction::Extension) {
+      auto const &type_ext = *(++it);
+      auto tname = std::find_if(ir.types.begin(),
+        ir.types.end(),
+        [&type_ext](auto const &p) { return p.second == type_ext.data; });
+      os << ", " << type_ext.data << "[" << tname->first << "]";
+    }
+    os << "\n";
   } break;
   case Instruction::StoreVar: {
     auto name = std::find_if(ir.vars.begin(),

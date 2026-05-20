@@ -1,6 +1,7 @@
 #pragma once
 #include "lexer.hpp"
 #include <memory>
+#include <optional>
 #include <string>
 #include <variant>
 #include <vector>
@@ -41,6 +42,8 @@ using StmtPtr = std::unique_ptr<Stmt>;
 struct DimStmt {
   std::string name;
   std::vector<ExprPtr> dims;
+  std::optional<std::string> type;
+  std::optional<ExprPtr> init;
 };
 struct LetStmt {
   std::string name;

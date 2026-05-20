@@ -1,1 +1,1 @@
-{"statements":[{"type":"DimStmt","name":"x","dims":[{"type":"Literal","value":2},{"type":"Literal","value":2}]},{"type":"LetStmt","name":"y","value":{"type":"Literal","value":20}}]}
+{"statements":[{"type":"DimStmt","name":"x","dims":[{"type":"Literal","value":2},{"type":"Literal","value":2}],"type":null,"init":null},{"type":"DimStmt","name":"y","dims":[],"type":"number","init":null},{"type":"DimStmt","name":"z","dims":[],"type":null,"init":{"type":"Literal","value":20}},{"type":"LetStmt","name":"t","value":{"type":"Literal","value":20}}]}
