@@ -1,5 +1,1 @@
-Let x = 10
-Let y = x - 2
-Dim Foo(x, y)
-Foo(3, 5) = 10
-
+'a'

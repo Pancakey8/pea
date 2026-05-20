@@ -1,4 +1,5 @@
 #include "ast.hpp"
+#include "bytecode.hpp"
 #include "irgen.hpp"
 #include "lexer.hpp"
 #include "parser.hpp"
@@ -53,4 +54,27 @@ int main() {
   }
 
   std::cout << *ir << '\n';
+
+  BytecodeEmitter emitter{ *ir };
+  std::vector<std::uint8_t> bytecode{};
+  emitter.emit(bytecode);
+
+  for (std::size_t base = 0; base < bytecode.size(); base += 8) {
+    for (std::size_t col = 0; col < 8; ++col) {
+      if (base + col >= bytecode.size())
+        std::print("00 ");
+      else {
+        std::print("{:02X} ", bytecode[base + col]);
+      }
+    }
+    std::print("| ");
+    for (std::size_t col = 0; col < 8; ++col) {
+      if (base + col >= bytecode.size())
+        std::print(". ");
+      else if (bytecode[base + col] >= 32 && bytecode[base + col] <= 127)
+        std::print("{:c} ", bytecode[base + col]);
+      else std::print(". ");
+    }
+    std::print("\n");
+  }
 }

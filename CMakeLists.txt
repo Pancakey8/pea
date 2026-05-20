@@ -15,9 +15,13 @@ add_library(pea-irgen src/irgen.cpp)
 target_include_directories(pea-irgen PUBLIC src/)
 target_link_libraries(pea-irgen pea-parser pea-lexer)
 
+add_library(pea-bytecode src/bytecode.cpp)
+target_include_directories(pea-bytecode PUBLIC src/)
+target_link_libraries(pea-bytecode pea-irgen)
+
 add_executable(pea src/main.cpp)
 target_include_directories(pea PUBLIC src/)
-target_link_libraries(pea pea-lexer pea-parser pea-irgen)
+target_link_libraries(pea pea-lexer pea-parser pea-irgen pea-bytecode)
 
 add_executable(pea-test-parser test/parser/test_runner.cpp)
 target_link_libraries(pea-test-parser pea-lexer pea-parser)
