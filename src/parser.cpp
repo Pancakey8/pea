@@ -205,17 +205,26 @@ std::expected<StmtPtr, Error> Parser::parse_statement() {
     return parse_sub();
   if (current.type == TokenType::KW_Return) {
     if (!in_subroutine)
-      return std::unexpected(Error{ "Return statement not allowed outside of subroutine", current.start, current.end });
+      return std::unexpected(
+        Error{ "Return statement not allowed outside of subroutine",
+          current.start,
+          current.end });
     return parse_return();
   }
   if (current.type == TokenType::KW_Break) {
     if (!in_loop)
-      return std::unexpected(Error{ "Break statement not allowed outside of loop", current.start, current.end });
+      return std::unexpected(
+        Error{ "Break statement not allowed outside of loop",
+          current.start,
+          current.end });
     return parse_break();
   }
   if (current.type == TokenType::KW_Continue) {
     if (!in_loop)
-      return std::unexpected(Error{ "Continue statement not allowed outside of loop", current.start, current.end });
+      return std::unexpected(
+        Error{ "Continue statement not allowed outside of loop",
+          current.start,
+          current.end });
     return parse_continue();
   }
 
@@ -243,21 +252,26 @@ std::expected<StmtPtr, Error> Parser::parse_dim() {
   if (!consume(TokenType::Ident))
     return std::unexpected(
       Error{ "Expected identifier", current.start, current.end });
-  if (!consume(TokenType::KW_As))
-    return std::unexpected(
-      Error{ "Expected 'as'", current.start, current.end });
-  std::string type = current.text;
-  if (!consume(TokenType::Ident))
-    return std::unexpected(
-      Error{ "Expected type", current.start, current.end });
-  ExprPtr init = nullptr;
-  if (current.type == TokenType::Eq) {
-    advance();
-    auto e = parse_expression();
-    if (!e)
-      return std::unexpected(e.error());
-    init = std::move(*e);
+  if (!consume(TokenType::LParen))
+    return std::unexpected(Error{ "Expected '('", current.start, current.end });
+
+  std::vector<ExprPtr> dims;
+  if (current.type != TokenType::RParen) {
+    do {
+      auto arg = parse_expression();
+      if (!arg)
+        return std::unexpected(arg.error());
+      dims.push_back(std::move(*arg));
+      if (current.type == TokenType::Comma)
+        advance();
+      else
+        break;
+    } while (true);
   }
+  if (!consume(TokenType::RParen))
+    return std::unexpected(
+      Error{ "Expected ')' after dimensions", current.start, current.end });
+
   Token last_t = current;
   if (!consume(TokenType::EOL))
     return std::unexpected(Error{ "Expected EOL", current.start, current.end });
@@ -265,7 +279,7 @@ std::expected<StmtPtr, Error> Parser::parse_dim() {
     last_t = current;
     advance();
   }
-  return std::make_unique<Stmt>(DimStmt{ name, type, std::move(init) },
+  return std::make_unique<Stmt>(DimStmt{ name, std::move(dims) },
     SourceRange{ start_t.start, last_t.end });
 }
 
@@ -399,7 +413,8 @@ std::expected<StmtPtr, Error> Parser::parse_for() {
   if (!start)
     return std::unexpected(start.error());
   if (!consume(TokenType::KW_To))
-    return std::unexpected(Error{ "Expected 'to'", current.start, current.end });
+    return std::unexpected(
+      Error{ "Expected 'to'", current.start, current.end });
   auto end = parse_expression();
   if (!end)
     return std::unexpected(end.error());
@@ -523,7 +538,8 @@ std::expected<StmtPtr, Error> Parser::parse_sub() {
   advance(); // sub
   std::string name = current.text;
   if (!consume(TokenType::Ident))
-    return std::unexpected(Error{ "Expected subroutine name", current.start, current.end });
+    return std::unexpected(
+      Error{ "Expected subroutine name", current.start, current.end });
   if (!consume(TokenType::LParen))
     return std::unexpected(Error{ "Expected '('", current.start, current.end });
 
@@ -532,10 +548,12 @@ std::expected<StmtPtr, Error> Parser::parse_sub() {
     std::string p_name = current.text;
     advance();
     if (!consume(TokenType::KW_As))
-      return std::unexpected(Error{ "Expected 'as'", current.start, current.end });
+      return std::unexpected(
+        Error{ "Expected 'as'", current.start, current.end });
     std::string p_type = current.text;
     if (!consume(TokenType::Ident))
-      return std::unexpected(Error{ "Expected parameter type", current.start, current.end });
+      return std::unexpected(
+        Error{ "Expected parameter type", current.start, current.end });
     params.push_back({ p_name, p_type });
     if (!consume(TokenType::Comma))
       break;
@@ -558,7 +576,8 @@ std::expected<StmtPtr, Error> Parser::parse_sub() {
     return std::unexpected(body.error());
 
   if (!consume(TokenType::KW_EndSub))
-    return std::unexpected(Error{ "Expected 'end sub'", current.start, current.end });
+    return std::unexpected(
+      Error{ "Expected 'end sub'", current.start, current.end });
 
   Token last_t = current;
   if (!consume(TokenType::EOL))
@@ -568,7 +587,8 @@ std::expected<StmtPtr, Error> Parser::parse_sub() {
     advance();
   }
 
-  return std::make_unique<Stmt>(SubDecl{ name, std::move(params), std::move(*body) },
+  return std::make_unique<Stmt>(
+    SubDecl{ name, std::move(params), std::move(*body) },
     SourceRange{ start_t.start, last_t.end });
 }
 
@@ -589,8 +609,8 @@ std::expected<StmtPtr, Error> Parser::parse_return() {
     last_t = current;
     advance();
   }
-  return std::make_unique<Stmt>(ReturnStmt{ std::move(val) },
-    SourceRange{ start_t.start, last_t.end });
+  return std::make_unique<Stmt>(
+    ReturnStmt{ std::move(val) }, SourceRange{ start_t.start, last_t.end });
 }
 
 std::expected<StmtPtr, Error> Parser::parse_break() {
@@ -603,7 +623,8 @@ std::expected<StmtPtr, Error> Parser::parse_break() {
     last_t = current;
     advance();
   }
-  return std::make_unique<Stmt>(BreakStmt{}, SourceRange{ start_t.start, last_t.end });
+  return std::make_unique<Stmt>(
+    BreakStmt{}, SourceRange{ start_t.start, last_t.end });
 }
 
 std::expected<StmtPtr, Error> Parser::parse_continue() {
@@ -616,7 +637,8 @@ std::expected<StmtPtr, Error> Parser::parse_continue() {
     last_t = current;
     advance();
   }
-  return std::make_unique<Stmt>(ContinueStmt{}, SourceRange{ start_t.start, last_t.end });
+  return std::make_unique<Stmt>(
+    ContinueStmt{}, SourceRange{ start_t.start, last_t.end });
 }
 
 std::expected<std::vector<StmtPtr>, Error> Parser::parse_statements(

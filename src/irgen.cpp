@@ -36,19 +36,15 @@ std::expected<void, Error> IrGen::emit(Program const &prog) {
 std::expected<void, Error> IrGen::emit(Stmt const &stmt) {
   auto vtor = Overloaded{ /* Formatter fix */
     [&](DimStmt const &s) -> std::expected<void, Error> {
-      auto type = resolve_type(s.type);
-      if (!type)
-        return std::unexpected(Error{ std::format("Unknown type '{}'", s.type),
-          stmt.range.start.line,
-          stmt.range.start.col });
-
-      if (auto res = emit(*s.init); !res)
-        return std::unexpected(res.error());
+      for (auto const &dim : s.dims) {
+        if (auto res = emit(*dim); !res)
+          return std::unexpected(res.error());
+      }
 
       auto var = var_register(s.name);
       prog.push_back({ Instruction::DefineVar, var });
-      prog.push_back({ Instruction::Extension, *type });
-      prog.push_back({ Instruction::StoreVar, var });
+      prog.push_back(
+        { Instruction::Extension, static_cast<std::uint16_t>(s.dims.size()) });
 
       return {};
     },
@@ -233,6 +229,8 @@ std::expected<void, Error> IrGen::emit(Stmt const &stmt) {
         }
       }
 
+      prog.push_back({ Instruction::Return, 0 });
+
       func_bodies[id] = std::move(prog);
       prog = std::move(main_prog);
 
@@ -243,7 +241,8 @@ std::expected<void, Error> IrGen::emit(Stmt const &stmt) {
         if (auto res = emit(*s.value); !res)
           return std::unexpected(res.error());
       }
-      prog.push_back({ Instruction::Return, static_cast<uint16_t>(s.value ? 1 : 0) });
+      prog.push_back(
+        { Instruction::Return, static_cast<uint16_t>(s.value ? 1 : 0) });
       return {};
     },
     [&](BreakStmt const &s) -> std::expected<void, Error> {
@@ -367,7 +366,8 @@ std::expected<void, Error> IrGen::emit(Expr const &expr) {
       }
       if (auto res = emit(*e.callee); !res)
         return std::unexpected(res.error());
-      prog.push_back({ Instruction::Call, static_cast<uint16_t>(e.args.size()) });
+      prog.push_back(
+        { Instruction::Call, static_cast<uint16_t>(e.args.size()) });
       return {};
     }
   };
@@ -494,11 +494,7 @@ void print_instr(std::ostream &os, It &it, ProgramIr const &ir) {
       ir.vars.end(),
       [&instr](auto const &p) { return p.second == instr.data; });
     auto const &ext = *(++it);
-    auto type = std::find_if(ir.types.begin(),
-      ir.types.end(),
-      [&ext](auto const &p) { return p.second == ext.data; });
-    os << "DEFINE_VAR " << instr.data << "[" << name->first << "], " << ext.data
-       << "[" << type->first << "]\n";
+    os << "DEFINE_VAR " << instr.data << "[" << name->first << "], " << ext.data << "\n";
   } break;
   case Instruction::StoreVar: {
     auto name = std::find_if(ir.vars.begin(),

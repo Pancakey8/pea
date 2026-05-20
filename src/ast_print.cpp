@@ -89,11 +89,12 @@ struct StmtPrinter {
   void operator()(const DimStmt& s) {
     os << "{\"type\":\"DimStmt\",\"name\":";
     op_json_str(os, s.name);
-    os << ",\"type\":";
-    op_json_str(os, s.type);
-    os << ",\"init\":";
-    if (s.init) os << *s.init; else os << "null";
-    os << "}";
+    os << ",\"dims\":[";
+    for (size_t i = 0; i < s.dims.size(); ++i) {
+      if (s.dims[i]) os << *s.dims[i]; else os << "null";
+      if (i < s.dims.size() - 1) os << ",";
+    }
+    os << "]}";
   }
 
   void operator()(const LetStmt& s) {

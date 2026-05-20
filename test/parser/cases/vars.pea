@@ -1,2 +1,2 @@
-dim x as int = 10
-let x = 20
+dim x(2, 2)
+let y = 20

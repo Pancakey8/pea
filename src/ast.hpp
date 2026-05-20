@@ -40,8 +40,7 @@ using StmtPtr = std::unique_ptr<Stmt>;
 
 struct DimStmt {
   std::string name;
-  std::string type;
-  ExprPtr init;
+  std::vector<ExprPtr> dims;
 };
 struct LetStmt {
   std::string name;

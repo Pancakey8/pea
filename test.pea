@@ -1,10 +1,5 @@
-Sub Foo(A as Number, B as Number)
-  Sub Foo(A as Number)
-    return A + 1
-  End Sub
-  return A + B
-End Sub
-
-Foo(2, 3)
-Foo(1)
+Let x = 10
+Let y = x - 2
+Dim Foo(x, y)
+Foo(3, 5) = 10
 
