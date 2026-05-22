@@ -18,7 +18,8 @@ enum Tag : std::uint64_t {
   TAG_NULL = 1,
   TAG_CHAR = 2,
   TAG_STR = 3,
-  TAG_FN = 4
+  TAG_FN = 4,
+  TAG_ARR = 5
 };
 
 constexpr std::uint64_t make_tag(Tag t) {
@@ -47,6 +48,11 @@ PeaNaN PeaNaN::of_func(std::size_t sz) {
 
 PeaNaN PeaNaN::of_null() { return { QNAN | make_tag(TAG_NULL) }; }
 
+PeaNaN PeaNaN::of_array(Array *arr) {
+  return { QNAN | make_tag(TAG_ARR) |
+           (reinterpret_cast<std::uint64_t>(arr) & PAYLOAD_MASK) };
+}
+
 bool PeaNaN::is_num() const { return !is_boxed(bits); }
 
 bool PeaNaN::is_chr() const {
@@ -64,9 +70,20 @@ bool PeaNaN::is_null() const {
 bool PeaNaN::is_fn() const {
   return is_boxed(bits) && ((bits & TAG_MASK) == make_tag(TAG_FN));
 }
+bool PeaNaN::is_arr() const {
+  return is_boxed(bits) && ((bits & TAG_MASK) == make_tag(TAG_ARR));
+}
 
 std::size_t PeaNaN::fn() const {
   return static_cast<std::size_t>(bits & PAYLOAD_MASK);
+}
+
+PeaNaN::Array *PeaNaN::arr() const {
+  std::uint64_t raw = bits & PAYLOAD_MASK;
+  if (raw & (1ULL << 47)) {
+    raw |= 0xFFFF000000000000ULL;
+  }
+  return reinterpret_cast<Array *>(raw);
 }
 
 std::string *PeaNaN::str() const {
@@ -99,6 +116,8 @@ std::optional<double> PeaNaN::coerce_num() const {
     } else {
       return {};
     }
+  } else if (is_arr()) {
+    return {};
   }
 
   return {};
@@ -116,6 +135,8 @@ std::optional<char> PeaNaN::coerce_chr() const {
   } else if (is_str()) {
     auto const s = str();
     return (s->size() == 1) ? std::optional{ (*s)[1] } : std::nullopt;
+  } else if (is_arr()) {
+    return {};
   }
 
   return {};
@@ -132,6 +153,8 @@ std::optional<std::string *> PeaNaN::coerce_str() const {
     return {};
   } else if (is_str()) {
     return str();
+  } else if (is_arr()) {
+    return {};
   }
 
   return {};
@@ -148,6 +171,8 @@ bool PeaNaN::is_truthy() const {
     return true;
   } else if (is_str()) {
     return !str()->empty();
+  } else if (is_arr()) {
+    return true;
   }
 
   return false;
@@ -168,6 +193,9 @@ bool PeaNaN::operator==(PeaNaN const &other) const {
 
   if (is_fn() && other.is_fn())
     return fn() == other.fn();
+
+  if (is_arr() && other.is_arr())
+    return arr()->dims == other.arr()->dims && arr()->data == other.arr()->data;
 
   if ((is_num() && !other.is_str()) || (!is_str() && other.is_num())) {
     auto self = coerce_num();
@@ -409,9 +437,25 @@ void Vm::run() {
       std::cout << "DefineVar:\n";
       auto var = read<std::uint16_t>();
       auto dim = read<std::uint16_t>();
-      for (std::uint16_t i = 0; i < dim; ++i)
-        stack.pop_back(); // TODO
       var_def(var);
+      if (dim > 0) {
+        std::size_t total = 1;
+        std::vector<std::size_t> dims(dim);
+        for (std::uint16_t i = 0; i < dim; ++i) {
+          auto num = stack.back().coerce_num();
+          if (!num)
+            return error("Array dimension must be a number");
+          if (num < 0)
+            return error("Array dimension must be > 0");
+          dims[dim - i - 1] = *num;
+          total *= *num;
+          stack.pop_back();
+        }
+        std::vector<PeaNaN> nans(total, PeaNaN::of_null());
+        var_set(var,
+          PeaNaN::of_array(
+            new PeaNaN::Array{ std::move(nans), std::move(dims) }));
+      }
     } break;
     case OpCode::DefineVarT: {
       std::cout << "DefineVarT:\n";
@@ -504,15 +548,34 @@ void Vm::run() {
     case OpCode::Call: {
       std::cout << "Call:\n";
       auto argc = read<std::uint16_t>();
-      std::println("Argc {}, stack has {}", argc, stack.size());
-      std::println("Shadows {}", shadow_stack.size());
-      std::size_t top = stack.size() - argc - 1;
-      call_stack.push_back({ ip, top, shadow_stack.size() });
-      auto ptr = stack.back();
+      auto callee = stack.back();
       stack.pop_back();
-      if (!ptr.is_fn())
-        return error("Calling non-function value");
-      ip = ptr.fn() + 8;
+      if (callee.is_fn()) {
+        std::println("Argc {}, stack has {}", argc, stack.size());
+        std::println("Shadows {}", shadow_stack.size());
+        std::size_t top = stack.size() - argc - 1;
+        call_stack.push_back({ ip, top, shadow_stack.size() });
+        ip = callee.fn() + 8;
+      } else if (callee.is_arr()) {
+        auto arr = callee.arr();
+        if (argc != arr->dims.size())
+          return error("Indexing array of wrong dimensions");
+        std::size_t step = 1;
+        std::size_t ind = 0;
+        for (std::size_t i = 0; i < argc; ++i) {
+          auto n = stack[stack.size() - i - 1].coerce_num();
+          if (!n)
+            return error("Trying to index array with non-number");
+          if (*n < 0 || *n > arr->dims[argc - 1 - i])
+            return error("Indexing out of bounds");
+          ind += step * (*n - 1);
+          step *= arr->dims[argc - 1 - i];
+        }
+        stack.resize(stack.size() - argc);
+        stack.push_back(arr->data[ind]);
+      } else {
+        return error("Trying to call non-function");
+      }
     } break;
     case OpCode::Return: {
       std::cout << "Return:\n";

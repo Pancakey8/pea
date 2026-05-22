@@ -1,12 +1,9 @@
-dim x = 0
-do while 1
-if i = 5 then
-continue
-end if
-let x = x + i
-let i = i + 1
-if i >= 10 then
-break
-end if
-loop
+dim x(3, 5, 4)
 
+for i = 1 to 3
+  for j = 1 to 5
+    for k = 1 to 4
+      x(i, j, k)
+    end for
+  end for
+end for

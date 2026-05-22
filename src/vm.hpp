@@ -7,6 +7,8 @@
 #include <vector>
 
 struct PeaNaN {
+  struct Array { std::vector<PeaNaN> data; std::vector<std::size_t> dims; };
+ 
   std::uint64_t bits;
 
   // TODO: Handle true QNaN
@@ -15,17 +17,20 @@ struct PeaNaN {
   static PeaNaN of_string(std::string *s);
   static PeaNaN of_func(std::size_t sz);
   static PeaNaN of_null();
+  static PeaNaN of_array(Array *arr);
 
   bool is_num() const;
   bool is_null() const;
   bool is_chr() const;
   bool is_str() const;
   bool is_fn() const;
+  bool is_arr() const;
 
   double num() const;
   char chr() const;
   std::string *str() const;
   std::size_t fn() const;
+  Array *arr() const;
 
   std::optional<double> coerce_num() const;
   std::optional<char> coerce_chr() const;
