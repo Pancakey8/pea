@@ -78,4 +78,10 @@ void test_operations() {
     Vm vm = vm_run("dim x\nlet x = not not_defined\n");
     expect(vm.variables[0].is_num() && vm.variables[0].num() == 1.0);
   }
+  {
+    Vm vm = vm_run("dim x(2, 3, 4)\nlet x(2, 1, 3) = 5.0\n");
+    expect(vm.variables[0].is_arr() &&
+           vm.variables[0].arr()->data[14].is_num() &&
+           vm.variables[0].arr()->data[14].num() == 5.0);
+  }
 }

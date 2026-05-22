@@ -1,4 +1,5 @@
 #include "test_runner.hpp"
+#include <algorithm>
 
 void test_branches() {
   {
@@ -120,5 +121,19 @@ void test_branches() {
                    "end sub\n"
                    "let x = fibo(10)\n");
     expect(vm.variables[0].is_num() && vm.variables[0].num() == 55.0);
+  }
+  {
+    Vm vm = vm_run("dim arr(5, 5)\n"
+                   "for i = 1 to 5\n"
+                   "for j = 1 to 5\n"
+                   "let arr(i, j) = 1\n"
+                   "end for\n"
+                   "end for\n");
+    expect(vm.variables[0].is_arr());
+    auto arr = vm.variables[0].arr();
+    expect(arr->dims.size() == 2 && arr->dims[0] == 5 && arr->dims[1] == 5);
+    expect(std::all_of(arr->data.begin(), arr->data.end(), [](auto x) {
+      return x.is_num() && x.num() == 1.0;
+    }));
   }
 }
