@@ -29,3 +29,6 @@ target_link_libraries(pea pea-lexer pea-parser pea-irgen pea-bytecode pea-vm)
 
 add_executable(pea-test-parser test/parser/test_runner.cpp)
 target_link_libraries(pea-test-parser pea-lexer pea-parser)
+
+add_executable(pea-test-vm test/vm/test_runner.cpp)
+target_link_libraries(pea-test-vm pea-lexer pea-parser pea-irgen pea-bytecode pea-vm)

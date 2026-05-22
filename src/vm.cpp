@@ -123,7 +123,7 @@ std::optional<char> PeaNaN::coerce_chr() const {
 
 std::optional<std::string *> PeaNaN::coerce_str() const {
   if (is_num()) {
-    return new std::string{ std::to_string(num()) };
+    return new std::string{ std::format("{:g}", num()) };
   } else if (is_chr()) {
     return new std::string(1, chr());
   } else if (is_null()) {
@@ -150,7 +150,38 @@ bool PeaNaN::is_truthy() const {
     return !str()->empty();
   }
 
-  return {};
+  return false;
+}
+
+bool PeaNaN::operator==(PeaNaN const &other) const {
+  if (is_num() && other.is_num())
+    return num() == other.num();
+
+  if (is_null() && other.is_null())
+    return true;
+
+  if (is_chr() && other.is_chr())
+    return chr() == other.chr();
+
+  if (is_str() && other.is_str())
+    return *str() == *other.str();
+
+  if (is_fn() && other.is_fn())
+    return fn() == other.fn();
+
+  if ((is_num() || !other.is_str()) || (!is_str() && other.is_num())) {
+    auto self = coerce_num();
+    auto they = other.coerce_num();
+    if (self && they)
+      return *self == *they;
+  }
+
+  auto self = coerce_str();
+  auto they = coerce_str();
+  if (self && they)
+    return **self == **they;
+
+  return false;
 }
 
 Vm::Vm(std::vector<std::uint8_t> bytes)
@@ -273,7 +304,7 @@ void Vm::run() {
       stack.pop_back();
       auto left = stack.back();
       stack.pop_back();
-      stack.push_back(PeaNaN::of_null()); // TODO
+      stack.push_back(PeaNaN::of_double(left == right)); // TODO
     } break;
     case OpCode::Neq: {
       std::cout << "Neq:\n";
@@ -281,7 +312,7 @@ void Vm::run() {
       stack.pop_back();
       auto left = stack.back();
       stack.pop_back();
-      stack.push_back(PeaNaN::of_null()); // TODO
+      stack.push_back(PeaNaN::of_double(left != right)); // TODO
     } break;
     case OpCode::Lt: {
       std::cout << "Lt:\n";

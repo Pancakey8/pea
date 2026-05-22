@@ -32,6 +32,8 @@ struct PeaNaN {
   std::optional<std::string*> coerce_str() const;
 
   bool is_truthy() const;
+
+  bool operator==(PeaNaN const &other) const;
 };
 
 struct CallFrame {
