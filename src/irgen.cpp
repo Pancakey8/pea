@@ -119,10 +119,28 @@ std::expected<void, Error> IrGen::emit(Stmt const &stmt) {
     },
     [&](ForStmt const &s) -> std::expected<void, Error> {
       auto var = var_register(s.var);
+
+      auto end_val = var_fresh();
+      if (auto res = emit(*s.end); !res)
+        return std::unexpected(res.error());
+      prog.push_back({ Instruction::StoreVar, end_val });
+
+      auto step_val = var_fresh();
+      if (s.step) {
+        if (auto res = emit(*s.step); !res)
+          return std::unexpected(res.error());
+      } else {
+        auto c = const_register({ PeaNumber{ 1 } });
+        prog.push_back({ Instruction::LoadConst, c });
+      }
+      prog.push_back({ Instruction::StoreVar, step_val });
+
+      prog.push_back({ Instruction::DefineVar, var });
+      prog.push_back({ Instruction::Extension, 0 });
       if (auto res = emit(*s.start); !res)
         return std::unexpected(res.error());
-
       prog.push_back({ Instruction::StoreVar, var });
+
       auto l_start = label_get();
       auto l_continue = label_get();
       auto l_end = label_get();
@@ -136,23 +154,13 @@ std::expected<void, Error> IrGen::emit(Stmt const &stmt) {
       loop_stack.pop_back();
 
       prog.push_back({ Instruction::Label, l_continue });
-      if (s.step) {
-        prog.push_back({ Instruction::LoadVar, var });
-        if (auto res = emit(*s.step); !res)
-          return std::unexpected(res.error());
-        prog.push_back({ Instruction::Add });
-        prog.push_back({ Instruction::StoreVar, var });
-      } else {
-        auto c = const_register({ PeaNumber{ 1 } });
-        prog.push_back({ Instruction::LoadVar, var });
-        prog.push_back({ Instruction::LoadConst, c });
-        prog.push_back({ Instruction::Add });
-        prog.push_back({ Instruction::StoreVar, var });
-      }
+      prog.push_back({ Instruction::LoadVar, var });
+      prog.push_back({ Instruction::LoadVar, step_val });
+      prog.push_back({ Instruction::Add });
+      prog.push_back({ Instruction::StoreVar, var });
 
       prog.push_back({ Instruction::LoadVar, var });
-      if (auto res = emit(*s.end); !res)
-        return std::unexpected(res.error());
+      prog.push_back({ Instruction::LoadVar, end_val });
       prog.push_back({ Instruction::Lte });
       prog.push_back({ Instruction::JumpTrue, l_start });
       prog.push_back({ Instruction::Label, l_end });
@@ -411,6 +419,12 @@ std::optional<std::uint16_t> IrGen::var_get(std::string const &name) {
   } else {
     return {};
   }
+}
+
+std::uint16_t IrGen::var_fresh() {
+  auto id = var_next++;
+  variables.insert({ "$VAR" + std::to_string(id), id });
+  return id;
 }
 
 std::uint16_t IrGen::const_register(PeaValue val) {

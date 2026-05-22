@@ -169,7 +169,7 @@ bool PeaNaN::operator==(PeaNaN const &other) const {
   if (is_fn() && other.is_fn())
     return fn() == other.fn();
 
-  if ((is_num() || !other.is_str()) || (!is_str() && other.is_num())) {
+  if ((is_num() && !other.is_str()) || (!is_str() && other.is_num())) {
     auto self = coerce_num();
     auto they = other.coerce_num();
     if (self && they)

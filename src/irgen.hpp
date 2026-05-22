@@ -94,6 +94,7 @@ private:
   std::uint16_t var_next{};
   std::uint16_t var_register(std::string const &name);
   std::optional<std::uint16_t> var_get(std::string const &name);
+  std::uint16_t var_fresh();
 
   std::vector<PeaValue> consts{};
   std::uint16_t const_register(PeaValue val);

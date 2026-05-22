@@ -1,30 +1,12 @@
-sub fibo(x)
-  if x < 2 then
-    return x
-  else
-    return fibo(x - 1) + fibo(x - 2)
-  end if
-end sub
+dim x = 0
+do while 1
+if i = 5 then
+continue
+end if
+let x = x + i
+let i = i + 1
+if i >= 10 then
+break
+end if
+loop
 
-let x = 10
-"Fibo " & fibo(x)
-
-let y = 10
-
-sub a()
-  dim y = 20
-  "Y = " & y
-end sub
-
-a()
-"Y = " & y
-
-dim z = 50
-
-sub b()
-  let z = z + 10
-end sub
-
-b()
-
-"Z = " & z

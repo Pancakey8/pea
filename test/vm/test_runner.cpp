@@ -2,6 +2,7 @@
 #include "bytecode.hpp"
 
 #include "operations.cpp"
+#include "branches.cpp"
 
 Vm vm_run(std::string const &input) {
   Lexer lexer{ input };
@@ -37,5 +38,6 @@ std::size_t pass{}, total{};
 
 int main() {
   test_operations();
+  test_branches();
   std::println("{} / {} tests passed", pass, total);
 }
