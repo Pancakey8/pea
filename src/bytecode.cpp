@@ -175,10 +175,16 @@ void BytecodeEmitter::emit_body(
         out[op] = static_cast<std::uint8_t>(OpCode::DefineVarT);
       }
     } break;
-    case Instruction::StoreVar:
+    case Instruction::StoreVar: {
+      auto op = out.size();
       out.push_back(static_cast<std::uint8_t>(OpCode::StoreVar));
       emit_le(out, out.end(), static_cast<std::uint16_t>(instr.data));
-      break;
+      if (it + 1 != instrs.end() && (it + 1)->kind == Instruction::Extension) {
+        auto dim_ext = *(++it);
+        emit_le(out, out.end(), static_cast<std::uint16_t>(dim_ext.data));
+        out[op] = static_cast<std::uint8_t>(OpCode::StoreVarI);
+      }
+    } break;
     case Instruction::LoadConst:
       out.push_back(static_cast<std::uint8_t>(OpCode::LoadConst));
       resolve_consts.push_back(out.size());

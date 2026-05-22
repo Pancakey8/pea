@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdlib>
+#include <functional>
 #include <iostream>
 #include <print>
 #include <string>
@@ -462,15 +463,56 @@ void Vm::run() {
       auto var = read<std::uint16_t>();
       auto dim = read<std::uint16_t>();
       auto type = read<std::uint16_t>(); // TODO
-      for (std::uint16_t i = 0; i < dim; ++i)
-        stack.pop_back(); // TODO
       var_def(var);
+      if (dim > 0) {
+        std::size_t total = 1;
+        std::vector<std::size_t> dims(dim);
+        for (std::uint16_t i = 0; i < dim; ++i) {
+          auto num = stack.back().coerce_num();
+          if (!num)
+            return error("Array dimension must be a number");
+          if (num < 0)
+            return error("Array dimension must be > 0");
+          dims[dim - i - 1] = *num;
+          total *= *num;
+          stack.pop_back();
+        }
+        std::vector<PeaNaN> nans(total, PeaNaN::of_null());
+        var_set(var,
+          PeaNaN::of_array(
+            new PeaNaN::Array{ std::move(nans), std::move(dims) }));
+      }
     } break;
     case OpCode::StoreVar: {
       std::cout << "StoreVar:\n";
       auto var = read<std::uint16_t>();
       var_set(var, stack.back());
       stack.pop_back();
+    } break;
+    case OpCode::StoreVarI: {
+      auto var = read<std::uint16_t>();
+      auto dimc = read<std::uint16_t>();
+      auto rhs = stack.back();
+      stack.pop_back();
+      auto value = var_get(var);
+      if (!value.is_arr())
+        return error("Index assignment to non-array");
+      auto arr = value.arr();
+      if (dimc != arr->dims.size())
+        return error("Indexing array of wrong dimensions");
+      std::size_t step = 1;
+      std::size_t ind = 0;
+      for (std::size_t i = 0; i < dimc; ++i) {
+        auto n = stack[stack.size() - i - 1].coerce_num();
+        if (!n)
+          return error("Trying to index array with non-number");
+        if (*n < 0 || *n > arr->dims[dimc - 1 - i])
+          return error("Indexing out of bounds");
+        ind += step * (*n - 1);
+        step *= arr->dims[dimc - 1 - i];
+      }
+      stack.resize(stack.size() - dimc);
+      arr->data[ind] = rhs;
     } break;
     case OpCode::LoadConst: {
       std::cout << "LoadConst:\n";
@@ -509,19 +551,27 @@ void Vm::run() {
     } break;
     case OpCode::Pop: {
       auto val = stack.back();
-      if (val.is_null()) {
-        std::println("Pop null");
-      } else if (val.is_chr()) {
-        std::println("Pop '{}'", val.chr());
-      } else if (val.is_num()) {
-        std::println("Pop {}", val.num());
-      } else if (val.is_fn()) {
-        std::println("Pop {:X}", val.fn());
-      } else if (val.is_str()) {
-        std::println("Pop \"{}\"", *val.str());
-      } else {
-        std::println("Pop bad value");
-      }
+      auto print_val = [&](this const auto &self, PeaNaN val) -> void {
+        if (val.is_null()) {
+          std::print("null");
+        } else if (val.is_chr()) {
+          std::print("'{}'", val.chr());
+        } else if (val.is_num()) {
+          std::print("{}", val.num());
+        } else if (val.is_fn()) {
+          std::print("{:X}", val.fn());
+        } else if (val.is_str()) {
+          std::print("\"{}\"", *val.str());
+        } else if (val.is_arr()) {
+          for (auto const &v : val.arr()->data) {
+            self(v);
+            std::print(",");
+          }
+        }
+      };
+      std::print("Pop ");
+      print_val(val);
+      std::print("\n");
       stack.pop_back();
     } break;
     case OpCode::Goto: {

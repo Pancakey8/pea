@@ -68,12 +68,26 @@ std::expected<void, Error> IrGen::emit(Stmt const &stmt) {
       return {};
     },
     [&](LetStmt const &s) -> std::expected<void, Error> {
-      if (auto res = emit(*s.value); !res)
-        return std::unexpected(res.error());
+      if (s.dims.empty()) {
+        if (auto res = emit(*s.value); !res)
+          return std::unexpected(res.error());
 
-      auto var = var_register(s.name);
-      prog.push_back({ Instruction::StoreVar, var });
-      return {};
+        auto var = var_register(s.name);
+        prog.push_back({ Instruction::StoreVar, var });
+        return {};
+      } else {
+        for (auto const &id : s.dims) {
+          if (auto res = emit(*id); !res)
+            return std::unexpected(res.error());
+        }
+        if (auto res = emit(*s.value); !res)
+          return std::unexpected(res.error());
+        auto var = var_register(s.name);
+        prog.push_back({ Instruction::StoreVar, var });
+        prog.push_back({ Instruction::Extension,
+          static_cast<std::uint16_t>(s.dims.size()) });
+        return {};
+      }
     },
     [&](IfStmt const &s) -> std::expected<void, Error> {
       auto l_else = label_get();
@@ -544,7 +558,12 @@ void print_instr(std::ostream &os, It &it, ProgramIr const &ir) {
     auto name = std::find_if(ir.vars.begin(),
       ir.vars.end(),
       [&instr](auto const &p) { return p.second == instr.data; });
-    os << "STORE_VAR " << instr.data << "[" << name->first << "]\n";
+    os << "STORE_VAR " << instr.data << "[" << name->first << "]";
+    if ((it + 1)->kind == Instruction::Extension) {
+      auto const &dim_ext = *(++it);
+      os << ", " << dim_ext.data;
+    }
+    os << "\n";
   } break;
   case Instruction::LoadConst: {
     os << "LOAD_CONST " << instr.data << "[";

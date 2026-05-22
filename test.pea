@@ -1,9 +1,12 @@
-dim x(3, 5, 4)
+dim x(2, 3, 3)
 
-for i = 1 to 3
-  for j = 1 to 5
-    for k = 1 to 4
-      x(i, j, k)
+for i = 1 to 2
+  for j = 1 to 3
+    for k = 1 to 3
+      let x(i, j, k) = i * j * k
     end for
   end for
 end for
+
+x
+

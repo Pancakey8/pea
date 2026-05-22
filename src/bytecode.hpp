@@ -29,6 +29,7 @@ enum class OpCode : std::uint8_t {
   DefineVar,
   DefineVarT,
   StoreVar,
+  StoreVarI,
   LoadConst,
   LoadNull,
   Pop,
