@@ -63,7 +63,7 @@ void BytecodeEmitter::emit_consts(std::vector<std::uint8_t> &out) {
     std::visit(Overloaded{
                  [&](PeaNumber const &v) {
                    out.push_back(Number);
-                   emit_le(out, out.end(), static_cast<std::uint64_t>(v.val));
+                   emit_le(out, out.end(), std::bit_cast<std::uint64_t>(v.val));
                  },
                  [&](PeaChar const &v) {
                    out.push_back(Char);

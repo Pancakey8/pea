@@ -1,7 +1,6 @@
-Sub Foo(X as Number, Y as String)
-  return Y & X
-End Sub
+if 0 then
+  let x = 10
+else
+  50
+end if
 
-Sub Bar(X, Y)
-  Let Z = X + Y
-End Sub

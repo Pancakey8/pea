@@ -3,6 +3,7 @@
 #include "irgen.hpp"
 #include "lexer.hpp"
 #include "parser.hpp"
+#include "vm.hpp"
 #include <fstream>
 #include <iostream>
 #include <print>
@@ -77,4 +78,8 @@ int main() {
     }
     std::print("\n");
   }
+
+  Vm vm{bytecode};
+  vm.run();
+  std::println("Finished");
 }

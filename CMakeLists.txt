@@ -19,9 +19,13 @@ add_library(pea-bytecode src/bytecode.cpp)
 target_include_directories(pea-bytecode PUBLIC src/)
 target_link_libraries(pea-bytecode pea-irgen)
 
+add_library(pea-vm src/vm.cpp)
+target_include_directories(pea-vm PUBLIC src/)
+target_link_libraries(pea-vm pea-bytecode)
+
 add_executable(pea src/main.cpp)
 target_include_directories(pea PUBLIC src/)
-target_link_libraries(pea pea-lexer pea-parser pea-irgen pea-bytecode)
+target_link_libraries(pea pea-lexer pea-parser pea-irgen pea-bytecode pea-vm)
 
 add_executable(pea-test-parser test/parser/test_runner.cpp)
 target_link_libraries(pea-test-parser pea-lexer pea-parser)
