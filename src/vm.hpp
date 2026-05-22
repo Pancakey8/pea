@@ -7,8 +7,11 @@
 #include <vector>
 
 struct PeaNaN {
-  struct Array { std::vector<PeaNaN> data; std::vector<std::size_t> dims; };
- 
+  struct Array {
+    std::vector<PeaNaN> data;
+    std::vector<std::size_t> dims;
+  };
+
   std::uint64_t bits;
 
   // TODO: Handle true QNaN
@@ -34,7 +37,7 @@ struct PeaNaN {
 
   std::optional<double> coerce_num() const;
   std::optional<char> coerce_chr() const;
-  std::optional<std::string*> coerce_str() const;
+  std::optional<std::string *> coerce_str() const;
 
   bool is_truthy() const;
 

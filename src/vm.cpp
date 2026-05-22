@@ -553,7 +553,7 @@ void Vm::run() {
       if (callee.is_fn()) {
         std::println("Argc {}, stack has {}", argc, stack.size());
         std::println("Shadows {}", shadow_stack.size());
-        std::size_t top = stack.size() - argc - 1;
+        std::size_t top = stack.size() - argc;
         call_stack.push_back({ ip, top, shadow_stack.size() });
         ip = callee.fn() + 8;
       } else if (callee.is_arr()) {

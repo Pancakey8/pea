@@ -138,6 +138,18 @@ struct StmtPrinter {
   void operator()(const LetStmt &s) {
     os << "{\"type\":\"LetStmt\",\"name\":";
     op_json_str(os, s.name);
+    if (s.dims.size() > 0) {
+      os << ",\"dims\":[";
+      for (size_t i = 0; i < s.dims.size(); ++i) {
+        if (s.dims[i])
+          os << *s.dims[i];
+        else
+          os << "null";
+        if (i < s.dims.size() - 1)
+          os << ",";
+      }
+      os << ']';
+    }
     os << ",\"value\":";
     if (s.value)
       os << *s.value;

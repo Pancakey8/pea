@@ -47,6 +47,7 @@ struct DimStmt {
 };
 struct LetStmt {
   std::string name;
+  std::vector<ExprPtr> dims;
   ExprPtr value;
 };
 

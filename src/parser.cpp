@@ -309,6 +309,25 @@ std::expected<StmtPtr, Error> Parser::parse_let() {
   if (!consume(TokenType::Ident))
     return std::unexpected(
       Error{ "Expected identifier", current.start, current.end });
+  std::vector<ExprPtr> dims{};
+  if (consume(TokenType::LParen)) {
+    if (current.type != TokenType::RParen) {
+      do {
+        auto arg = parse_expression();
+        if (!arg)
+          return std::unexpected(arg.error());
+        dims.push_back(std::move(*arg));
+        if (current.type == TokenType::Comma)
+          advance();
+        else
+          break;
+      } while (true);
+    }
+
+    if (!consume(TokenType::RParen))
+      return std::unexpected(
+        Error{ "Expected ')' after dimensions", current.start, current.end });
+  }
   if (!consume(TokenType::Eq))
     return std::unexpected(Error{ "Expected '='", current.start, current.end });
   auto val = parse_expression();
@@ -322,7 +341,8 @@ std::expected<StmtPtr, Error> Parser::parse_let() {
     advance();
   }
   return std::make_unique<Stmt>(
-    LetStmt{ name, std::move(*val) }, SourceRange{ start_t.start, last_t.end });
+    LetStmt{ name, std::move(dims), std::move(*val) },
+    SourceRange{ start_t.start, last_t.end });
 }
 
 std::expected<StmtPtr, Error> Parser::parse_if() {
@@ -569,8 +589,8 @@ std::expected<StmtPtr, Error> Parser::parse_sub() {
     std::optional<std::string> p_type{};
     if (consume(TokenType::KW_As)) {
       if (current.type != TokenType::Ident)
-	return std::unexpected(
-			       Error{ "Expected parameter type", current.start, current.end });
+        return std::unexpected(
+          Error{ "Expected parameter type", current.start, current.end });
       p_type = current.text;
       advance();
     }
