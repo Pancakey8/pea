@@ -3,6 +3,7 @@
 #include <bit>
 #include <charconv>
 #include <cmath>
+#include <cstddef>
 #include <cstdlib>
 #include <iostream>
 #include <print>
@@ -149,7 +150,7 @@ bool PeaNaN::is_truthy() const {
     return !str()->empty();
   }
 
-  return {};  
+  return {};
 }
 
 Vm::Vm(std::vector<std::uint8_t> bytes)
@@ -340,7 +341,7 @@ void Vm::run() {
       auto opl = left.coerce_str();
       if (!opr || !opl)
         return error("'&' requires string, string");
-      auto s = new std::string{*opl.value() + *opr.value()}; // TODO
+      auto s = new std::string{ *opl.value() + *opr.value() }; // TODO
       stack.push_back(PeaNaN::of_string(s));
     } break;
     case OpCode::Pos: {
@@ -349,7 +350,7 @@ void Vm::run() {
       stack.pop_back();
       auto n = op.coerce_num();
       if (!n)
-	return error("'+' requires number");
+        return error("'+' requires number");
       stack.push_back(PeaNaN::of_double(*n));
     } break;
     case OpCode::Neg: {
@@ -358,7 +359,7 @@ void Vm::run() {
       stack.pop_back();
       auto n = op.coerce_num();
       if (!n)
-	return error("'-' requires number");
+        return error("'-' requires number");
       stack.push_back(PeaNaN::of_double(-*n));
     } break;
     case OpCode::Not: {
@@ -371,7 +372,7 @@ void Vm::run() {
     case OpCode::LoadVar: {
       std::cout << "LoadVar:\n";
       auto var = read<std::uint16_t>();
-      stack.push_back(variables[var]);
+      stack.push_back(var_get(var));
     } break;
     case OpCode::DefineVar: {
       std::cout << "DefineVar:\n";
@@ -379,6 +380,7 @@ void Vm::run() {
       auto dim = read<std::uint16_t>();
       for (std::uint16_t i = 0; i < dim; ++i)
         stack.pop_back(); // TODO
+      var_def(var);
     } break;
     case OpCode::DefineVarT: {
       std::cout << "DefineVarT:\n";
@@ -387,11 +389,12 @@ void Vm::run() {
       auto type = read<std::uint16_t>(); // TODO
       for (std::uint16_t i = 0; i < dim; ++i)
         stack.pop_back(); // TODO
+      var_def(var);
     } break;
     case OpCode::StoreVar: {
       std::cout << "StoreVar:\n";
       auto var = read<std::uint16_t>();
-      variables[var] = stack.back();
+      var_set(var, stack.back());
       stack.pop_back();
     } break;
     case OpCode::LoadConst: {
@@ -471,8 +474,9 @@ void Vm::run() {
       std::cout << "Call:\n";
       auto argc = read<std::uint16_t>();
       std::println("Argc {}, stack has {}", argc, stack.size());
+      std::println("Shadows {}", shadow_stack.size());
       std::size_t top = stack.size() - argc - 1;
-      call_stack.push_back({ ip, top });
+      call_stack.push_back({ ip, top, shadow_stack.size() });
       auto ptr = stack.back();
       stack.pop_back();
       if (!ptr.is_fn())
@@ -489,8 +493,8 @@ void Vm::run() {
         frame.return_to,
         frame.stack_at,
         stack.size());
-      while (stack.size() > frame.stack_at)
-        stack.pop_back();
+      stack.resize(frame.stack_at);
+      shadow_stack.resize(frame.shadows_at);
       stack.push_back(ret);
       ip = frame.return_to;
     } break;
@@ -513,6 +517,45 @@ void Vm::move_start() {
 void Vm::error(std::string_view const str) {
   std::println("PeaVM: Error: {}", str);
   std::abort();
+}
+
+void Vm::var_set(std::size_t id, PeaNaN val) {
+  if (!call_stack.empty()) {
+    auto bot = call_stack.back().shadows_at;
+    for (std::size_t i = bot; i < shadow_stack.size(); ++i) {
+      if (shadow_stack[i].first == id) {
+        shadow_stack[i].second = val;
+        return;
+      }
+    }
+  }
+
+  variables[id] = val;
+}
+
+void Vm::var_def(std::size_t id) {
+  if (call_stack.empty())
+    return;
+  auto bot = call_stack.back().shadows_at;
+  for (std::size_t i = bot; i < shadow_stack.size(); ++i) {
+    if (shadow_stack[i].first == id) {
+      return;
+    }
+  }
+  shadow_stack.push_back({ id, PeaNaN::of_null() });
+}
+
+PeaNaN Vm::var_get(std::size_t id) {
+  if (!call_stack.empty()) {
+    auto bot = call_stack.back().shadows_at;
+    for (std::size_t i = bot; i < shadow_stack.size(); ++i) {
+      if (shadow_stack[i].first == id) {
+        return shadow_stack[i].second;
+      }
+    }
+  }
+
+  return variables[id];
 }
 
 template <typename Int> Int Vm::read() {

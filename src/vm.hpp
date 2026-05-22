@@ -37,6 +37,7 @@ struct PeaNaN {
 struct CallFrame {
   std::size_t return_to;
   std::size_t stack_at;
+  std::size_t shadows_at;
 };
 
 class Vm {
@@ -55,5 +56,11 @@ private:
   std::vector<PeaNaN> stack{};
   std::vector<PeaNaN> variables{};
   std::vector<CallFrame> call_stack{};
+  std::vector<std::pair<std::size_t, PeaNaN>> shadow_stack{};
+
+  void var_set(std::size_t id, PeaNaN val);
+  void var_def(std::size_t id);
+  PeaNaN var_get(std::size_t id);
+
   size_t ip{};
 };
