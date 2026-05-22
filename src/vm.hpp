@@ -2,6 +2,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <optional>
 #include <string_view>
 #include <vector>
 
@@ -25,6 +26,17 @@ struct PeaNaN {
   char chr() const;
   std::string *str() const;
   std::size_t fn() const;
+
+  std::optional<double> coerce_num() const;
+  std::optional<char> coerce_chr() const;
+  std::optional<std::string*> coerce_str() const;
+
+  bool is_truthy() const;
+};
+
+struct CallFrame {
+  std::size_t return_to;
+  std::size_t stack_at;
 };
 
 class Vm {
@@ -42,5 +54,6 @@ private:
   std::vector<std::uint8_t> bytes{};
   std::vector<PeaNaN> stack{};
   std::vector<PeaNaN> variables{};
+  std::vector<CallFrame> call_stack{};
   size_t ip{};
 };

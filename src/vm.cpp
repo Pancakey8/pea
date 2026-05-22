@@ -1,9 +1,12 @@
 #include "vm.hpp"
 #include "bytecode.hpp"
 #include <bit>
+#include <charconv>
+#include <cmath>
 #include <cstdlib>
 #include <iostream>
 #include <print>
+#include <string>
 
 constexpr std::uint64_t QNAN = 0x7ff8000000000000ULL;
 constexpr std::uint64_t TAG_SHIFT = 48;
@@ -77,6 +80,78 @@ char PeaNaN::chr() const { return static_cast<char>(bits & 0xFF); }
 
 double PeaNaN::num() const { return std::bit_cast<double>(bits); }
 
+std::optional<double> PeaNaN::coerce_num() const {
+  if (is_num()) {
+    return num();
+  } else if (is_chr()) {
+    return static_cast<double>(chr());
+  } else if (is_null()) {
+    return 0;
+  } else if (is_fn()) {
+    return {};
+  } else if (is_str()) {
+    auto const s = str();
+    double dbl;
+    auto [_, ec] = std::from_chars(s->data(), s->data() + s->size(), dbl);
+    if (ec == std::errc()) {
+      return dbl;
+    } else {
+      return {};
+    }
+  }
+
+  return {};
+}
+
+std::optional<char> PeaNaN::coerce_chr() const {
+  if (is_num()) {
+    return static_cast<char>(num());
+  } else if (is_chr()) {
+    return chr();
+  } else if (is_null()) {
+    return '\0';
+  } else if (is_fn()) {
+    return {};
+  } else if (is_str()) {
+    auto const s = str();
+    return (s->size() == 1) ? std::optional{ (*s)[1] } : std::nullopt;
+  }
+
+  return {};
+}
+
+std::optional<std::string *> PeaNaN::coerce_str() const {
+  if (is_num()) {
+    return new std::string{ std::to_string(num()) };
+  } else if (is_chr()) {
+    return new std::string(1, chr());
+  } else if (is_null()) {
+    return new std::string("null");
+  } else if (is_fn()) {
+    return {};
+  } else if (is_str()) {
+    return str();
+  }
+
+  return {};
+}
+
+bool PeaNaN::is_truthy() const {
+  if (is_num()) {
+    return num() != 0;
+  } else if (is_chr()) {
+    return chr() != '\0';
+  } else if (is_null()) {
+    return false;
+  } else if (is_fn()) {
+    return true;
+  } else if (is_str()) {
+    return !str()->empty();
+  }
+
+  return {};  
+}
+
 Vm::Vm(std::vector<std::uint8_t> bytes)
     : bytes(std::move(bytes)), variables{ 1ULL << 16, PeaNaN::of_null() } {
   move_start();
@@ -93,7 +168,11 @@ void Vm::run() {
       stack.pop_back();
       auto left = stack.back();
       stack.pop_back();
-      stack.push_back(PeaNaN::of_null()); // TODO
+      auto opr = right.coerce_num();
+      auto opl = left.coerce_num();
+      if (!opr || !opl)
+        return error("'+' requires number, number");
+      stack.push_back(PeaNaN::of_double(*opl + *opr));
     } break;
     case OpCode::Sub: {
       std::cout << "Sub:\n";
@@ -101,7 +180,11 @@ void Vm::run() {
       stack.pop_back();
       auto left = stack.back();
       stack.pop_back();
-      stack.push_back(PeaNaN::of_null()); // TODO
+      auto opr = right.coerce_num();
+      auto opl = left.coerce_num();
+      if (!opr || !opl)
+        return error("'-' requires number, number");
+      stack.push_back(PeaNaN::of_double(*opl - *opr));
     } break;
     case OpCode::Mul: {
       std::cout << "Mul:\n";
@@ -109,7 +192,11 @@ void Vm::run() {
       stack.pop_back();
       auto left = stack.back();
       stack.pop_back();
-      stack.push_back(PeaNaN::of_null()); // TODO
+      auto opr = right.coerce_num();
+      auto opl = left.coerce_num();
+      if (!opr || !opl)
+        return error("'*' requires number, number");
+      stack.push_back(PeaNaN::of_double(*opl * *opr));
     } break;
     case OpCode::Div: {
       std::cout << "Div:\n";
@@ -117,7 +204,11 @@ void Vm::run() {
       stack.pop_back();
       auto left = stack.back();
       stack.pop_back();
-      stack.push_back(PeaNaN::of_null()); // TODO
+      auto opr = right.coerce_num();
+      auto opl = left.coerce_num();
+      if (!opr || !opl)
+        return error("'/' requires number, number");
+      stack.push_back(PeaNaN::of_double(*opl / *opr));
     } break;
     case OpCode::IDiv: {
       std::cout << "IDiv:\n";
@@ -125,7 +216,11 @@ void Vm::run() {
       stack.pop_back();
       auto left = stack.back();
       stack.pop_back();
-      stack.push_back(PeaNaN::of_null()); // TODO
+      auto opr = right.coerce_num();
+      auto opl = left.coerce_num();
+      if (!opr || !opl)
+        return error("'\\' requires number, number");
+      stack.push_back(PeaNaN::of_double(std::trunc(*opl / *opr)));
     } break;
     case OpCode::Pow: {
       std::cout << "Pow:\n";
@@ -133,7 +228,11 @@ void Vm::run() {
       stack.pop_back();
       auto left = stack.back();
       stack.pop_back();
-      stack.push_back(PeaNaN::of_null()); // TODO
+      auto opr = right.coerce_num();
+      auto opl = left.coerce_num();
+      if (!opr || !opl)
+        return error("'^' requires number, number");
+      stack.push_back(PeaNaN::of_double(std::pow(*opl, *opr)));
     } break;
     case OpCode::Mod: {
       std::cout << "Mod:\n";
@@ -141,7 +240,11 @@ void Vm::run() {
       stack.pop_back();
       auto left = stack.back();
       stack.pop_back();
-      stack.push_back(PeaNaN::of_null()); // TODO
+      auto opr = right.coerce_num();
+      auto opl = left.coerce_num();
+      if (!opr || !opl)
+        return error("'mod' requires number, number");
+      stack.push_back(PeaNaN::of_double(std::fmod(*opl, *opr)));
     } break;
     case OpCode::And: {
       std::cout << "And:\n";
@@ -149,7 +252,9 @@ void Vm::run() {
       stack.pop_back();
       auto left = stack.back();
       stack.pop_back();
-      stack.push_back(PeaNaN::of_null()); // TODO
+      auto opr = right.is_truthy();
+      auto opl = left.is_truthy();
+      stack.push_back(PeaNaN::of_double(opl && opr));
     } break;
     case OpCode::Or: {
       std::cout << "Or:\n";
@@ -157,7 +262,9 @@ void Vm::run() {
       stack.pop_back();
       auto left = stack.back();
       stack.pop_back();
-      stack.push_back(PeaNaN::of_null()); // TODO
+      auto opr = right.is_truthy();
+      auto opl = left.is_truthy();
+      stack.push_back(PeaNaN::of_double(opl || opr));
     } break;
     case OpCode::Eq: {
       std::cout << "Eq:\n";
@@ -181,7 +288,11 @@ void Vm::run() {
       stack.pop_back();
       auto left = stack.back();
       stack.pop_back();
-      stack.push_back(PeaNaN::of_null()); // TODO
+      auto opr = right.coerce_num();
+      auto opl = left.coerce_num();
+      if (!opr || !opl)
+        return error("'<' requires number, number");
+      stack.push_back(PeaNaN::of_double(*opl < *opr));
     } break;
     case OpCode::Gt: {
       std::cout << "Gt:\n";
@@ -189,7 +300,11 @@ void Vm::run() {
       stack.pop_back();
       auto left = stack.back();
       stack.pop_back();
-      stack.push_back(PeaNaN::of_null()); // TODO
+      auto opr = right.coerce_num();
+      auto opl = left.coerce_num();
+      if (!opr || !opl)
+        return error("'>' requires number, number");
+      stack.push_back(PeaNaN::of_double(*opl > *opr));
     } break;
     case OpCode::Lte: {
       std::cout << "Lte:\n";
@@ -197,7 +312,11 @@ void Vm::run() {
       stack.pop_back();
       auto left = stack.back();
       stack.pop_back();
-      stack.push_back(PeaNaN::of_null()); // TODO
+      auto opr = right.coerce_num();
+      auto opl = left.coerce_num();
+      if (!opr || !opl)
+        return error("'<=' requires number, number");
+      stack.push_back(PeaNaN::of_double(*opl <= *opr));
     } break;
     case OpCode::Gte: {
       std::cout << "Gte:\n";
@@ -205,7 +324,11 @@ void Vm::run() {
       stack.pop_back();
       auto left = stack.back();
       stack.pop_back();
-      stack.push_back(PeaNaN::of_null()); // TODO
+      auto opr = right.coerce_num();
+      auto opl = left.coerce_num();
+      if (!opr || !opl)
+        return error("'>=' requires number, number");
+      stack.push_back(PeaNaN::of_double(*opl >= *opr));
     } break;
     case OpCode::Concat: {
       std::cout << "Concat:\n";
@@ -213,25 +336,37 @@ void Vm::run() {
       stack.pop_back();
       auto left = stack.back();
       stack.pop_back();
-      stack.push_back(PeaNaN::of_null()); // TODO
+      auto opr = right.coerce_str();
+      auto opl = left.coerce_str();
+      if (!opr || !opl)
+        return error("'&' requires string, string");
+      auto s = new std::string{*opl.value() + *opr.value()}; // TODO
+      stack.push_back(PeaNaN::of_string(s));
     } break;
     case OpCode::Pos: {
       std::cout << "Pos:\n";
       auto op = stack.back();
       stack.pop_back();
-      stack.push_back(PeaNaN::of_null()); // TODO
+      auto n = op.coerce_num();
+      if (!n)
+	return error("'+' requires number");
+      stack.push_back(PeaNaN::of_double(*n));
     } break;
     case OpCode::Neg: {
       std::cout << "Neg:\n";
       auto op = stack.back();
       stack.pop_back();
-      stack.push_back(PeaNaN::of_null()); // TODO
+      auto n = op.coerce_num();
+      if (!n)
+	return error("'-' requires number");
+      stack.push_back(PeaNaN::of_double(-*n));
     } break;
     case OpCode::Not: {
       std::cout << "Not:\n";
       auto op = stack.back();
       stack.pop_back();
-      stack.push_back(PeaNaN::of_null()); // TODO
+      auto b = op.is_truthy();
+      stack.push_back(PeaNaN::of_double(!b)); // TODO
     } break;
     case OpCode::LoadVar: {
       std::cout << "LoadVar:\n";
@@ -295,7 +430,20 @@ void Vm::run() {
       stack.push_back(PeaNaN::of_null());
     } break;
     case OpCode::Pop: {
-      std::cout << "Pop:\n";
+      auto val = stack.back();
+      if (val.is_null()) {
+        std::println("Pop null");
+      } else if (val.is_chr()) {
+        std::println("Pop '{}'", val.chr());
+      } else if (val.is_num()) {
+        std::println("Pop {}", val.num());
+      } else if (val.is_fn()) {
+        std::println("Pop {:X}", val.fn());
+      } else if (val.is_str()) {
+        std::println("Pop \"{}\"", *val.str());
+      } else {
+        std::println("Pop bad value");
+      }
       stack.pop_back();
     } break;
     case OpCode::Goto: {
@@ -308,7 +456,7 @@ void Vm::run() {
       auto off = read<std::int32_t>();
       auto val = stack.back();
       stack.pop_back();
-      if (val.is_num() && val.num() == 0)
+      if (val.is_num() && val.num() == 0) // TODO
         ip = instr + off;
     } break;
     case OpCode::JumpTrue: {
@@ -316,19 +464,35 @@ void Vm::run() {
       auto off = read<std::int32_t>();
       auto val = stack.back();
       stack.pop_back();
-      if (val.is_num() && val.num() != 0)
+      if (val.is_num() && val.num() != 0) // TODO
         ip = instr + off;
     } break;
     case OpCode::Call: {
       std::cout << "Call:\n";
       auto argc = read<std::uint16_t>();
-      for (std::uint16_t i = 0; i < argc; ++i)
-        stack.pop_back(); // TODO
-      stack.push_back(PeaNaN::of_null());
+      std::println("Argc {}, stack has {}", argc, stack.size());
+      std::size_t top = stack.size() - argc - 1;
+      call_stack.push_back({ ip, top });
+      auto ptr = stack.back();
+      stack.pop_back();
+      if (!ptr.is_fn())
+        return error("Calling non-function value");
+      ip = ptr.fn() + 8;
     } break;
     case OpCode::Return: {
       std::cout << "Return:\n";
-      // TODO: Won't hit yet
+      auto ret = stack.back();
+      stack.pop_back();
+      auto frame = call_stack.back();
+      call_stack.pop_back();
+      std::println("Returning to {:X} with {}, have {}",
+        frame.return_to,
+        frame.stack_at,
+        stack.size());
+      while (stack.size() > frame.stack_at)
+        stack.pop_back();
+      stack.push_back(ret);
+      ip = frame.return_to;
     } break;
     default:
       return error("Invalid instruction");
