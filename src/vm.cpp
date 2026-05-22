@@ -304,7 +304,7 @@ void Vm::run() {
       stack.pop_back();
       auto left = stack.back();
       stack.pop_back();
-      stack.push_back(PeaNaN::of_double(left == right)); // TODO
+      stack.push_back(PeaNaN::of_double(left == right));
     } break;
     case OpCode::Neq: {
       std::cout << "Neq:\n";
@@ -312,7 +312,7 @@ void Vm::run() {
       stack.pop_back();
       auto left = stack.back();
       stack.pop_back();
-      stack.push_back(PeaNaN::of_double(left != right)); // TODO
+      stack.push_back(PeaNaN::of_double(left != right));
     } break;
     case OpCode::Lt: {
       std::cout << "Lt:\n";
@@ -372,7 +372,7 @@ void Vm::run() {
       auto opl = left.coerce_str();
       if (!opr || !opl)
         return error("'&' requires string, string");
-      auto s = new std::string{ *opl.value() + *opr.value() }; // TODO
+      auto s = new std::string{ *opl.value() + *opr.value() };
       stack.push_back(PeaNaN::of_string(s));
     } break;
     case OpCode::Pos: {
@@ -398,7 +398,7 @@ void Vm::run() {
       auto op = stack.back();
       stack.pop_back();
       auto b = op.is_truthy();
-      stack.push_back(PeaNaN::of_double(!b)); // TODO
+      stack.push_back(PeaNaN::of_double(!b));
     } break;
     case OpCode::LoadVar: {
       std::cout << "LoadVar:\n";
