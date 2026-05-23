@@ -85,7 +85,8 @@ struct LoopLabels {
 
 enum PeaBuiltinIdentifier {
   PEA_ID_LENGTH = (1 << 16) - 1,
-  PEA_ID_AT = (1 << 16) - 2
+  PEA_ID_AT = (1 << 16) - 2,
+  PEA_ID_PRINTLN = (1 << 16) - 3,
 };
 
 class IrGen {
@@ -101,7 +102,8 @@ private:
 
   std::unordered_map<std::string, std::uint16_t> variables{
     {"length", PEA_ID_LENGTH},
-    {"at", PEA_ID_AT}
+    {"at", PEA_ID_AT},
+    {"println", PEA_ID_PRINTLN},
   };
   std::uint16_t var_next{};
   std::uint16_t var_register(std::string const &name);

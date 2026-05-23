@@ -84,6 +84,7 @@ class Vm;
 
 struct BuiltinFns {
   static PeaNaN array_at(Vm &vm, std::uint16_t argc);
+  static PeaNaN println(Vm &vm, std::uint16_t argc);
 };
 
 class Vm {
@@ -107,7 +108,8 @@ private:
   std::vector<std::pair<std::size_t, PeaNaN>> shadow_stack{};
   std::array<PeaVTable, (1ULL << 16)> vtables{};
   std::vector<std::function<PeaNaN(Vm &, std::uint16_t)>> internal_fns{
-    BuiltinFns::array_at
+    BuiltinFns::array_at,
+    BuiltinFns::println
   };
 
   void var_set(std::size_t id, PeaNaN val);

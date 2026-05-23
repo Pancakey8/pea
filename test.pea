@@ -1,13 +1,14 @@
 dim x = "Hello"
-x.length
-x
+println(x.length)
+println(x)
 
 dim foo(2, 2)
-foo.length
-foo
-
 let foo(1, 1) = "Hi"
+let foo(2, 1) = 67
 
-foo.at(1, 1)
-foo(1, 1)
+println(foo.length)
+println(foo)
+
+println(foo.at(1, 1))
+println(foo(1, 1))
 
