@@ -3,6 +3,8 @@ project(pea)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+set(CMAKE_CXX_FLAGS -fsanitize=address,undefined)
+set(LINK_FLAGS -fsanitize=address,undefined)
 
 add_library(pea-lexer src/lexer.cpp)
 target_include_directories(pea-lexer PUBLIC src/)

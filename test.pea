@@ -2,3 +2,12 @@ dim x = "Hello"
 x.length
 x
 
+dim foo(2, 2)
+foo.length
+foo
+
+let foo(1, 1) = "Hi"
+
+foo.at(1, 1)
+foo(1, 1)
+

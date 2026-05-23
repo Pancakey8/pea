@@ -3,16 +3,12 @@
 #include "irgen.hpp"
 #include <bit>
 #include <cassert>
-#include <charconv>
 #include <cmath>
 #include <cstddef>
 #include <cstdlib>
 #include <cstring>
-#include <functional>
 #include <iostream>
 #include <print>
-#include <ranges>
-#include <string>
 
 constexpr std::uint64_t QNAN = 0x7ff8000000000000ULL;
 constexpr std::uint64_t TAG_SHIFT = 48;
@@ -22,11 +18,9 @@ constexpr std::uint64_t PAYLOAD_MASK = 0x0000FFFFFFFFFFFFULL;
 enum Tag : std::uint64_t {
   TAG_NULL = 1,
   TAG_CHAR = 2,
-  TAG_STR = 3,
-  TAG_FN = 4,
-  TAG_ARR = 5,
-  TAG_REF = 6,
-  TAG_OBJ = 7
+  TAG_FN = 3,
+  TAG_REF = 4,
+  TAG_OBJ = 5
 };
 
 constexpr std::uint64_t make_tag(Tag t) {
@@ -43,22 +37,12 @@ PeaNaN PeaNaN::of_char(char c) {
   return { QNAN | make_tag(TAG_CHAR) | static_cast<std::uint8_t>(c) };
 }
 
-PeaNaN PeaNaN::of_string(std::string *s) {
-  return { QNAN | make_tag(TAG_STR) |
-           (reinterpret_cast<std::uint64_t>(s) & PAYLOAD_MASK) };
-}
-
 PeaNaN PeaNaN::of_func(std::size_t sz) {
   return { QNAN | make_tag(TAG_FN) |
            (static_cast<std::uint64_t>(sz) & PAYLOAD_MASK) };
 }
 
 PeaNaN PeaNaN::of_null() { return { QNAN | make_tag(TAG_NULL) }; }
-
-PeaNaN PeaNaN::of_array(Array *arr) {
-  return { QNAN | make_tag(TAG_ARR) |
-           (reinterpret_cast<std::uint64_t>(arr) & PAYLOAD_MASK) };
-}
 
 PeaNaN PeaNaN::of_ref(PeaNaN *ref) {
   return { QNAN | make_tag(TAG_REF) |
@@ -76,20 +60,12 @@ bool PeaNaN::is_chr() const {
   return is_boxed(bits) && ((bits & TAG_MASK) == make_tag(TAG_CHAR));
 }
 
-bool PeaNaN::is_str() const {
-  return is_boxed(bits) && ((bits & TAG_MASK) == make_tag(TAG_STR));
-}
-
 bool PeaNaN::is_null() const {
   return is_boxed(bits) && ((bits & TAG_MASK) == make_tag(TAG_NULL));
 }
 
 bool PeaNaN::is_fn() const {
   return is_boxed(bits) && ((bits & TAG_MASK) == make_tag(TAG_FN));
-}
-
-bool PeaNaN::is_arr() const {
-  return is_boxed(bits) && ((bits & TAG_MASK) == make_tag(TAG_ARR));
 }
 
 bool PeaNaN::is_ref() const {
@@ -104,28 +80,12 @@ std::size_t PeaNaN::fn() const {
   return static_cast<std::size_t>(bits & PAYLOAD_MASK);
 }
 
-PeaNaN::Array *PeaNaN::arr() const {
-  std::uint64_t raw = bits & PAYLOAD_MASK;
-  if (raw & (1ULL << 47)) {
-    raw |= 0xFFFF000000000000ULL;
-  }
-  return reinterpret_cast<Array *>(raw);
-}
-
 PeaObject *PeaNaN::obj() const {
   std::uint64_t raw = bits & PAYLOAD_MASK;
   if (raw & (1ULL << 47)) {
     raw |= 0xFFFF000000000000ULL;
   }
   return reinterpret_cast<PeaObject *>(raw);
-}
-
-std::string *PeaNaN::str() const {
-  std::uint64_t raw = bits & PAYLOAD_MASK;
-  if (raw & (1ULL << 47)) {
-    raw |= 0xFFFF000000000000ULL;
-  }
-  return reinterpret_cast<std::string *>(raw);
 }
 
 char PeaNaN::chr() const { return static_cast<char>(bits & 0xFF); }
@@ -149,17 +109,6 @@ std::optional<double> PeaNaN::coerce_num() const {
     return 0;
   } else if (is_fn()) {
     return {};
-  } else if (is_str()) {
-    auto const s = str();
-    double dbl;
-    auto [_, ec] = std::from_chars(s->data(), s->data() + s->size(), dbl);
-    if (ec == std::errc()) {
-      return dbl;
-    } else {
-      return {};
-    }
-  } else if (is_arr()) {
-    return {};
   }
 
   return {};
@@ -174,29 +123,6 @@ std::optional<char> PeaNaN::coerce_chr() const {
     return '\0';
   } else if (is_fn()) {
     return {};
-  } else if (is_str()) {
-    auto const s = str();
-    return (s->size() == 1) ? std::optional{ (*s)[1] } : std::nullopt;
-  } else if (is_arr()) {
-    return {};
-  }
-
-  return {};
-}
-
-std::optional<std::string *> PeaNaN::coerce_str() const {
-  if (is_num()) {
-    return new std::string{ std::format("{:g}", num()) };
-  } else if (is_chr()) {
-    return new std::string(1, chr());
-  } else if (is_null()) {
-    return new std::string("null");
-  } else if (is_fn()) {
-    return {};
-  } else if (is_str()) {
-    return str();
-  } else if (is_arr()) {
-    return {};
   }
 
   return {};
@@ -210,10 +136,6 @@ bool PeaNaN::is_truthy() const {
   } else if (is_null()) {
     return false;
   } else if (is_fn()) {
-    return true;
-  } else if (is_str()) {
-    return !str()->empty();
-  } else if (is_arr()) {
     return true;
   }
 
@@ -230,32 +152,15 @@ bool PeaNaN::operator==(PeaNaN const &other) const {
   if (is_chr() && other.is_chr())
     return chr() == other.chr();
 
-  if (is_str() && other.is_str())
-    return *str() == *other.str();
-
-  if (is_fn() && other.is_fn())
-    return fn() == other.fn();
-
-  if (is_arr() && other.is_arr())
-    return arr()->dims == other.arr()->dims && arr()->data == other.arr()->data;
-
-  if ((is_num() && !other.is_str()) || (!is_str() && other.is_num())) {
-    auto self = coerce_num();
-    auto they = other.coerce_num();
-    if (self && they)
-      return *self == *they;
-  }
-
-  auto self = coerce_str();
-  auto they = coerce_str();
-  if (self && they)
-    return **self == **they;
-
   return false;
 }
 
 Vm::Vm(std::vector<std::uint8_t> bytes)
     : bytes(std::move(bytes)), variables{ 1ULL << 16, PeaNaN::of_null() } {
+  vtables[static_cast<std::uint16_t>(InternalObj::String)] = { {} };
+  vtables[static_cast<std::uint16_t>(InternalObj::Array)] = {
+    { { PEA_ID_AT, (1ULL << 48) - 1 } }
+  };
   move_start();
 }
 
@@ -438,12 +343,7 @@ void Vm::run() {
       stack.pop_back();
       auto left = stack.back();
       stack.pop_back();
-      auto opr = right.coerce_str();
-      auto opl = left.coerce_str();
-      if (!opr || !opl)
-        return error("'&' requires string, string");
-      auto s = new std::string{ *opl.value() + *opr.value() };
-      stack.push_back(PeaNaN::of_string(s));
+      stack.push_back(PeaNaN::of_null());
     } break;
     case OpCode::Pos: {
       std::cout << "Pos:\n";
@@ -489,25 +389,42 @@ void Vm::run() {
       stack.push_back(member_get(obj.obj(), field));
     } break;
     case OpCode::Dispatch: {
-
+      auto meth = read<std::uint16_t>();
+      auto argc = read<std::uint16_t>();
+      auto self = stack.back();
+      if (!self.is_obj())
+        return error("Dispatching non-existent method");
+      if (auto meth_off = member_get_method(self.obj(), meth)) {
+        dispatch_call(PeaNaN::of_func(*meth_off), argc + 1);
+      } else {
+        return error("Dispatching non-existent method");
+      }
     } break;
     case OpCode::LoadVar: {
       std::cout << "LoadVar:\n";
       auto var = read<std::uint16_t>();
-      stack.push_back(var_get(var));
+      auto v = var_get(var);
+      if (v.is_obj())
+        std::println("{}", (void *)v.obj());
+      stack.push_back(v);
     } break;
     case OpCode::LoadRef: {
       auto var = read<std::uint16_t>();
       stack.push_back(var_ref(var));
     } break;
+    case OpCode::DefineVarT:
+      [[fallthrough]];
     case OpCode::DefineVar: {
-      std::cout << "DefineVar:\n";
+      std::cout << "DefineVar(T):\n";
       auto var = read<std::uint16_t>();
       auto dim = read<std::uint16_t>();
       var_def(var);
+      if (static_cast<OpCode>(op) == OpCode::DefineVarT)
+        ; // TODO
       if (dim > 0) {
         std::size_t total = 1;
-        std::vector<std::size_t> dims(dim);
+        auto dims =
+          static_cast<std::size_t *>(std::calloc(dim, sizeof(std::size_t)));
         for (std::uint16_t i = 0; i < dim; ++i) {
           auto num = stack.back().coerce_num();
           if (!num)
@@ -518,35 +435,17 @@ void Vm::run() {
           total *= *num;
           stack.pop_back();
         }
-        std::vector<PeaNaN> nans(total, PeaNaN::of_null());
-        var_set(var,
-          PeaNaN::of_array(
-            new PeaNaN::Array{ std::move(nans), std::move(dims) }));
-      }
-    } break;
-    case OpCode::DefineVarT: {
-      std::cout << "DefineVarT:\n";
-      auto var = read<std::uint16_t>();
-      auto dim = read<std::uint16_t>();
-      auto type = read<std::uint16_t>(); // TODO
-      var_def(var);
-      if (dim > 0) {
-        std::size_t total = 1;
-        std::vector<std::size_t> dims(dim);
-        for (std::uint16_t i = 0; i < dim; ++i) {
-          auto num = stack.back().coerce_num();
-          if (!num)
-            return error("Array dimension must be a number");
-          if (num < 0)
-            return error("Array dimension must be > 0");
-          dims[dim - i - 1] = *num;
-          total *= *num;
-          stack.pop_back();
-        }
-        std::vector<PeaNaN> nans(total, PeaNaN::of_null());
-        var_set(var,
-          PeaNaN::of_array(
-            new PeaNaN::Array{ std::move(nans), std::move(dims) }));
+        auto mem =
+          std::malloc(offsetof(PeaObjArray, elems) + total * sizeof(PeaNaN));
+        PeaObjArray *arr = ::new (mem) PeaObjArray;
+        arr->kind = static_cast<std::uint16_t>(InternalObj::Array);
+        arr->dim = dim;
+        arr->dims = dims;
+        arr->len = total;
+        for (std::size_t i = 0; i < total; ++i)
+          arr->elems[i] = PeaNaN::of_null();
+
+        var_set(var, PeaNaN::of_obj(reinterpret_cast<PeaObject *>(arr)));
       }
     } break;
     case OpCode::StoreVar: {
@@ -557,28 +456,30 @@ void Vm::run() {
     } break;
     case OpCode::StoreVarI: {
       auto var = read<std::uint16_t>();
+      auto val = var_get(var);
       auto dimc = read<std::uint16_t>();
       auto rhs = stack.back();
       stack.pop_back();
-      auto value = var_get(var);
-      if (!value.is_arr())
-        return error("Index assignment to non-array");
-      auto arr = value.arr();
-      if (dimc != arr->dims.size())
-        return error("Indexing array of wrong dimensions");
+      if (!val.is_obj() || val.obj()->kind != static_cast<std::uint16_t>(InternalObj::Array))
+	return error("Index setting non-array");
+      auto arr = reinterpret_cast<PeaObjArray *>(val.obj());
+      if (dimc != arr->dim) {
+	return error("Indexing array of wrong dimensions");
+      }
       std::size_t step = 1;
       std::size_t ind = 0;
       for (std::size_t i = 0; i < dimc; ++i) {
-        auto n = stack[stack.size() - i - 1].coerce_num();
-        if (!n)
-          return error("Trying to index array with non-number");
-        if (*n < 0 || *n > arr->dims[dimc - 1 - i])
-          return error("Indexing out of bounds");
-        ind += step * (*n - 1);
-        step *= arr->dims[dimc - 1 - i];
+	auto n = stack[stack.size() - i - 1].coerce_num();
+	if (!n) {
+	  return error("Trying to index array with non-number");
+	}
+	if (*n < 0 || *n > arr->dims[dimc - 1 - i]) {
+	  return error("Indexing out of bounds");
+	}
+	ind += step * (*n - 1);
+	step *= arr->dims[dimc - 1 - i];
       }
-      stack.resize(stack.size() - dimc);
-      arr->data[ind] = rhs;
+      arr->elems[ind] = rhs;
     } break;
     case OpCode::LoadConst: {
       std::cout << "LoadConst:\n";
@@ -596,7 +497,7 @@ void Vm::run() {
       } break;
       case 2: { // String
         auto len = read_at<std::uint64_t>(off + 1);
-        auto mem = std::malloc(sizeof(PeaObjString) + len + 1);
+        auto mem = std::malloc(offsetof(PeaObjString, str) + len + 1);
         PeaObjString *obj = ::new (mem) PeaObjString;
         obj->kind = static_cast<std::uint16_t>(InternalObj::String);
         obj->len = len;
@@ -628,14 +529,8 @@ void Vm::run() {
           std::print("{}", val.num());
         } else if (val.is_fn()) {
           std::print("{:X}", val.fn());
-        } else if (val.is_str()) {
-          std::print("\"{}\"", *val.str());
-        } else if (val.is_arr()) {
-          for (auto const &v : val.arr()->data) {
-            self(v);
-            std::print(",");
-          }
         } else if (val.is_obj()) {
+          std::println("{}", (void *)val.obj());
           switch (static_cast<InternalObj>(val.obj()->kind)) {
           case InternalObj::String: {
             auto s = reinterpret_cast<PeaObjString *>(val.obj());
@@ -643,8 +538,8 @@ void Vm::run() {
           } break;
           case InternalObj::Array: {
             auto a = reinterpret_cast<PeaObjArray *>(val.obj());
-            std::print("Object ");
-            for (auto const i : std::ranges::views::iota(a->len)) {
+            std::print("Object {} ", a->len);
+            for (std::size_t i = 0; i < a->len; ++i) {
               self(a->elems[i]);
               std::print(",");
             }
@@ -685,32 +580,13 @@ void Vm::run() {
       std::cout << "Call:\n";
       auto argc = read<std::uint16_t>();
       auto callee = stack.back();
-      stack.pop_back();
-      if (callee.is_fn()) {
-        std::println("Argc {}, stack has {}", argc, stack.size());
-        std::println("Shadows {}", shadow_stack.size());
-        std::size_t top = stack.size() - argc;
-        call_stack.push_back({ ip, top, shadow_stack.size() });
-        ip = callee.fn() + 8;
-      } else if (callee.is_arr()) {
-        auto arr = callee.arr();
-        if (argc != arr->dims.size())
-          return error("Indexing array of wrong dimensions");
-        std::size_t step = 1;
-        std::size_t ind = 0;
-        for (std::size_t i = 0; i < argc; ++i) {
-          auto n = stack[stack.size() - i - 1].coerce_num();
-          if (!n)
-            return error("Trying to index array with non-number");
-          if (*n < 0 || *n > arr->dims[argc - 1 - i])
-            return error("Indexing out of bounds");
-          ind += step * (*n - 1);
-          step *= arr->dims[argc - 1 - i];
-        }
-        stack.resize(stack.size() - argc);
-        stack.push_back(arr->data[ind]);
+      if (callee.is_obj()) {
+	auto meth_at = member_get_method(callee.obj(), PEA_ID_AT);
+	if (!meth_at) return error("Indexing non-indexable object");
+	dispatch_call(PeaNaN::of_func(*meth_at), argc + 1);
       } else {
-        return error("Trying to call non-function");
+	stack.pop_back();
+	dispatch_call(callee, argc);
       }
     } break;
     case OpCode::Return: {
@@ -839,6 +715,39 @@ PeaNaN Vm::member_get(PeaObject *val, std::uint16_t id) {
   }
 }
 
+std::optional<std::size_t> Vm::member_get_method(
+  PeaObject *val, std::uint16_t id) {
+  if (auto it = std::find_if(vtables[val->kind].table.begin(),
+        vtables[val->kind].table.end(),
+        [id](auto x) { return x.first == id; });
+    it != vtables[val->kind].table.end()) {
+    return it->second;
+  }
+
+  return {};
+}
+
+void Vm::dispatch_call(PeaNaN callee, std::uint16_t argc) {
+  if (callee.is_fn()) {
+    if (callee.fn() > bytes.size()) {
+      std::uint16_t off = (1ULL << 48) - 1 - callee.fn();
+      std::println("{} {}", callee.fn(), off);
+      auto top = stack.size() - argc;
+      auto val = internal_fns[off](*this, argc);
+      stack.resize(top);
+      stack.push_back(val);
+    } else {
+      std::println("Argc {}, stack has {}", argc, stack.size());
+      std::println("Shadows {}", shadow_stack.size());
+      std::size_t top = stack.size() - argc;
+      call_stack.push_back({ ip, top, shadow_stack.size() });
+      ip = callee.fn() + 8;
+    }
+  } else {
+    return error("Trying to call non-function");
+  }
+}
+
 template <typename Int> Int Vm::read() {
   std::array<std::uint8_t, sizeof(Int)> b{};
   std::copy(bytes.begin() + ip, bytes.begin() + ip + sizeof(Int), b.begin());
@@ -857,4 +766,31 @@ template <typename Int> Int Vm::read_at(std::size_t pos) {
     std::reverse(b.begin(), b.end());
   }
   return std::bit_cast<Int>(b);
+}
+
+PeaNaN BuiltinFns::array_at(Vm &vm, std::uint16_t argc) {
+  auto self = vm.stack.back();
+  vm.stack.pop_back();
+  auto dimc = argc - 1;
+  auto arr = reinterpret_cast<PeaObjArray *>(self.obj());
+  if (dimc != arr->dim) {
+    vm.error("Indexing array of wrong dimensions");
+    return PeaNaN::of_null();
+  }
+  std::size_t step = 1;
+  std::size_t ind = 0;
+  for (std::size_t i = 0; i < dimc; ++i) {
+    auto n = vm.stack[vm.stack.size() - i - 1].coerce_num();
+    if (!n) {
+      vm.error("Trying to index array with non-number");
+      return PeaNaN::of_null();
+    }
+    if (*n < 0 || *n > arr->dims[dimc - 1 - i]) {
+      vm.error("Indexing out of bounds");
+      return PeaNaN::of_null();
+    }
+    ind += step * (*n - 1);
+    step *= arr->dims[dimc - 1 - i];
+  }
+  return arr->elems[ind];
 }
