@@ -1,10 +1,4 @@
-sub fill(n, byval arr)
-  for i = 1 to n
-    let arr(i) = i
-  end for
-end sub
-
-dim series(10)
-fill(10, series)
-series
+dim x = "Hello"
+x.length
+x
 

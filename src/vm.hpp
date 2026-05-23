@@ -1,10 +1,13 @@
 #pragma once
+#include "irgen.hpp"
 #include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <optional>
 #include <string_view>
 #include <vector>
+
+struct PeaObject;
 
 struct PeaNaN {
   struct Array {
@@ -22,6 +25,7 @@ struct PeaNaN {
   static PeaNaN of_null();
   static PeaNaN of_array(Array *arr);
   static PeaNaN of_ref(PeaNaN *ref);
+  static PeaNaN of_obj(PeaObject *obj);
 
   bool is_num() const;
   bool is_null() const;
@@ -30,6 +34,7 @@ struct PeaNaN {
   bool is_fn() const;
   bool is_arr() const;
   bool is_ref() const;
+  bool is_obj() const;
 
   double num() const;
   char chr() const;
@@ -37,6 +42,7 @@ struct PeaNaN {
   std::size_t fn() const;
   Array *arr() const;
   PeaNaN *ref() const;
+  PeaObject *obj() const;
 
   std::optional<double> coerce_num() const;
   std::optional<char> coerce_chr() const;
@@ -45,6 +51,24 @@ struct PeaNaN {
   bool is_truthy() const;
 
   bool operator==(PeaNaN const &other) const;
+};
+
+enum class InternalObj : std::uint16_t { String, Array };
+
+struct PeaObjString {
+  std::uint16_t kind{static_cast<std::uint16_t>(InternalObj::String)};
+  std::size_t len;
+  char str[];
+};
+
+struct PeaObjArray {
+  std::uint16_t kind{static_cast<std::uint16_t>(InternalObj::Array)};
+  std::size_t len;
+  PeaNaN elems[];
+};
+
+struct PeaObject {
+  std::uint16_t kind;
 };
 
 struct CallFrame {
@@ -75,6 +99,8 @@ private:
   void var_def(std::size_t id);
   PeaNaN var_get(std::size_t id);
   PeaNaN var_ref(std::size_t id);
+
+  PeaNaN member_get(PeaObject *val, std::uint16_t id);
 
   size_t ip{};
 };

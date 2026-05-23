@@ -1,13 +1,17 @@
 #include "vm.hpp"
 #include "bytecode.hpp"
+#include "irgen.hpp"
 #include <bit>
+#include <cassert>
 #include <charconv>
 #include <cmath>
 #include <cstddef>
 #include <cstdlib>
+#include <cstring>
 #include <functional>
 #include <iostream>
 #include <print>
+#include <ranges>
 #include <string>
 
 constexpr std::uint64_t QNAN = 0x7ff8000000000000ULL;
@@ -21,7 +25,8 @@ enum Tag : std::uint64_t {
   TAG_STR = 3,
   TAG_FN = 4,
   TAG_ARR = 5,
-  TAG_REF = 6
+  TAG_REF = 6,
+  TAG_OBJ = 7
 };
 
 constexpr std::uint64_t make_tag(Tag t) {
@@ -60,6 +65,11 @@ PeaNaN PeaNaN::of_ref(PeaNaN *ref) {
            (reinterpret_cast<std::uint64_t>(ref) & PAYLOAD_MASK) };
 }
 
+PeaNaN PeaNaN::of_obj(PeaObject *ref) {
+  return { QNAN | make_tag(TAG_OBJ) |
+           (reinterpret_cast<std::uint64_t>(ref) & PAYLOAD_MASK) };
+}
+
 bool PeaNaN::is_num() const { return !is_boxed(bits); }
 
 bool PeaNaN::is_chr() const {
@@ -86,6 +96,10 @@ bool PeaNaN::is_ref() const {
   return is_boxed(bits) && ((bits & TAG_MASK) == make_tag(TAG_REF));
 }
 
+bool PeaNaN::is_obj() const {
+  return is_boxed(bits) && ((bits & TAG_MASK) == make_tag(TAG_OBJ));
+}
+
 std::size_t PeaNaN::fn() const {
   return static_cast<std::size_t>(bits & PAYLOAD_MASK);
 }
@@ -96,6 +110,14 @@ PeaNaN::Array *PeaNaN::arr() const {
     raw |= 0xFFFF000000000000ULL;
   }
   return reinterpret_cast<Array *>(raw);
+}
+
+PeaObject *PeaNaN::obj() const {
+  std::uint64_t raw = bits & PAYLOAD_MASK;
+  if (raw & (1ULL << 47)) {
+    raw |= 0xFFFF000000000000ULL;
+  }
+  return reinterpret_cast<PeaObject *>(raw);
 }
 
 std::string *PeaNaN::str() const {
@@ -455,6 +477,20 @@ void Vm::run() {
         stack.push_back(*op.ref());
       }
     } break;
+    case OpCode::Member: {
+      auto field = read<std::uint16_t>();
+      auto obj = stack.back();
+      stack.pop_back();
+      if (!obj.is_obj()) {
+        stack.push_back(PeaNaN::of_null());
+        break;
+      }
+
+      stack.push_back(member_get(obj.obj(), field));
+    } break;
+    case OpCode::Dispatch: {
+
+    } break;
     case OpCode::LoadVar: {
       std::cout << "LoadVar:\n";
       auto var = read<std::uint16_t>();
@@ -560,12 +596,14 @@ void Vm::run() {
       } break;
       case 2: { // String
         auto len = read_at<std::uint64_t>(off + 1);
-        std::string *s =
-          new std::string{}; // TODO: Garbage collect, handle double pointer
-        s->resize(len);
-        std::copy(
-          bytes.begin() + off + 9, bytes.begin() + off + 9 + len, s->begin());
-        stack.push_back(PeaNaN::of_string(s));
+        auto mem = std::malloc(sizeof(PeaObjString) + len + 1);
+        PeaObjString *obj = ::new (mem) PeaObjString;
+        obj->kind = static_cast<std::uint16_t>(InternalObj::String);
+        obj->len = len;
+        std::memcpy(obj->str, reinterpret_cast<char *>(&bytes[off + 9]), len);
+        obj->str[obj->len] = '\0';
+
+        stack.push_back(PeaNaN::of_obj(reinterpret_cast<PeaObject *>(obj)));
       } break;
       case 3: { // FuncPtr
         auto ptr = read_at<std::size_t>(off + 1);
@@ -596,6 +634,24 @@ void Vm::run() {
           for (auto const &v : val.arr()->data) {
             self(v);
             std::print(",");
+          }
+        } else if (val.is_obj()) {
+          switch (static_cast<InternalObj>(val.obj()->kind)) {
+          case InternalObj::String: {
+            auto s = reinterpret_cast<PeaObjString *>(val.obj());
+            std::print("Object \"{}\"", reinterpret_cast<char const *>(s->str));
+          } break;
+          case InternalObj::Array: {
+            auto a = reinterpret_cast<PeaObjArray *>(val.obj());
+            std::print("Object ");
+            for (auto const i : std::ranges::views::iota(a->len)) {
+              self(a->elems[i]);
+              std::print(",");
+            }
+          } break;
+          default:
+            assert(false && "TODO: General objects");
+            break;
           }
         }
       };
@@ -699,7 +755,7 @@ void Vm::var_set(std::size_t id, PeaNaN val) {
     for (std::size_t i = bot; i < shadow_stack.size(); ++i) {
       if (shadow_stack[i].first == id) {
         if (shadow_stack[i].second.is_ref()) {
-	  *shadow_stack[i].second.ref() = val;
+          *shadow_stack[i].second.ref() = val;
         } else {
           shadow_stack[i].second = val;
         }
@@ -756,7 +812,31 @@ PeaNaN Vm::var_ref(std::size_t id) {
     }
   }
 
-  return variables[id].is_ref() ? variables[id] : PeaNaN::of_ref(&variables[id]);
+  return variables[id].is_ref() ? variables[id]
+                                : PeaNaN::of_ref(&variables[id]);
+}
+
+PeaNaN Vm::member_get(PeaObject *val, std::uint16_t id) {
+  switch (static_cast<InternalObj>(val->kind)) {
+  case InternalObj::String: {
+    if (id == PEA_ID_LENGTH) {
+      return PeaNaN::of_double(reinterpret_cast<PeaObjString *>(val)->len);
+    } else {
+      return PeaNaN::of_null();
+    }
+  } break;
+  case InternalObj::Array: {
+    if (id == PEA_ID_LENGTH) {
+      return PeaNaN::of_double(reinterpret_cast<PeaObjArray *>(val)->len);
+    } else {
+      return PeaNaN::of_null();
+    }
+  } break;
+
+  default:
+    assert(false && "TODO: General objects");
+    break;
+  }
 }
 
 template <typename Int> Int Vm::read() {

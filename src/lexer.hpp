@@ -72,6 +72,7 @@ enum class TokenType {
   RParen,
   Comma,
   Colon,
+  Dot,
   // Special
   EOL,
   EndOfFile

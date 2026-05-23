@@ -325,6 +325,32 @@ std::expected<void, Error> IrGen::emit(Expr const &expr) {
       return {};
     },
     [&](BinaryOp const &e) -> std::expected<void, Error> {
+      if (e.op == TokenType::Dot) {
+        if (auto call = std::get_if<Call>(&e.right->data)) {
+	  for (auto const &arg : call->args) {
+            if (auto const var = std::get_if<Variable>(&arg->data)) {
+              std::uint16_t id = var_register(var->name);
+              prog.push_back({ Instruction::LoadRef, id });
+            } else {
+              if (auto res = emit(*arg); !res)
+		return std::unexpected(res.error());
+            }
+	  }
+	  if (auto res = emit(*e.left); !res)
+            return std::unexpected(res.error());
+	  std::uint16_t meth = var_register(std::get<Variable>(call->callee->data).name);
+	  prog.push_back({ Instruction::Dispatch, meth });
+	  prog.push_back({ Instruction::Extension, static_cast<std::uint16_t>(call->args.size()) });
+        } else {
+	  if (auto res = emit(*e.left); !res)
+            return std::unexpected(res.error());
+          auto ex = std::get<Variable>(e.right->data);
+          std::uint16_t memb = var_register(ex.name);
+          prog.push_back({ Instruction::Member, memb });
+	}
+        return {};
+      }
+
       if (auto res = emit(*e.left); !res)
         return std::unexpected(res.error());
 
@@ -633,6 +659,20 @@ void print_instr(std::ostream &os, It &it, ProgramIr const &ir) {
   case Instruction::Return:
     os << "RETURN " << instr.data << "\n";
     break;
+  case Instruction::Member: {
+    auto name = std::find_if(ir.vars.begin(),
+      ir.vars.end(),
+      [&instr](auto const &p) { return p.second == instr.data; });
+    os << "MEMBER " << instr.data << "[" << name->first << "]\n";
+  } break;
+  case Instruction::Dispatch: {
+    auto name = std::find_if(ir.vars.begin(),
+      ir.vars.end(),
+      [&instr](auto const &p) { return p.second == instr.data; });
+    os << "DISPATCH " << instr.data << "[" << name->first << "]";
+    auto count = *(++it);
+    os << ", " << count.data << "\n";
+  } break;
   case Instruction::Extension:
     break;
   }

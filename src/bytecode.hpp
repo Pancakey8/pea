@@ -26,6 +26,8 @@ enum class OpCode : std::uint8_t {
   Neg,
   Not,
   Deref,
+  Member,
+  Dispatch,
   LoadVar,
   LoadRef,
   DefineVar,

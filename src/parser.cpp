@@ -1,5 +1,6 @@
 #include "parser.hpp"
 #include "lexer.hpp"
+#include <variant>
 
 Parser::Parser(Lexer &l) : lexer(l) { advance(); }
 
@@ -60,6 +61,8 @@ int Parser::get_precedence(TokenType type) {
     return 30;
   case TokenType::Caret:
     return 40;
+  case TokenType::Dot:
+    return 45;
   case TokenType::LParen:
     return 50;
   default:
@@ -161,6 +164,20 @@ std::expected<ExprPtr, Error> Parser::parse_infix(ExprPtr left) {
   auto right = parse_expression(next_prec);
   if (!right)
     return right;
+
+  if (op == TokenType::Dot &&
+      !std::holds_alternative<Variable>((*right)->data)) {
+    if (auto call = std::get_if<Call>(&(*right)->data)) {
+      if (!std::holds_alternative<Variable>(call->callee->data))
+        return std::unexpected(Error{ "Method dispatch requires identifier",
+          (*right)->range.start,
+          (*right)->range.end });
+    } else {
+      return std::unexpected(Error{ "Member access requires identifier",
+        (*right)->range.start,
+        (*right)->range.end });
+    }
+  }
 
   return std::make_unique<Expr>(
     BinaryOp{ op, std::move(left), std::move(*right) },
@@ -583,12 +600,17 @@ std::expected<StmtPtr, Error> Parser::parse_sub() {
     return std::unexpected(Error{ "Expected '('", current.start, current.end });
 
   std::vector<Parameter> params;
-  while (current.type == TokenType::Ident || current.type == TokenType::KW_ByRef || current.type == TokenType::KW_ByVal) {
+  while (current.type == TokenType::Ident ||
+         current.type == TokenType::KW_ByRef ||
+         current.type == TokenType::KW_ByVal) {
     bool is_ref = false;
-    if (consume(TokenType::KW_ByRef)) is_ref = true;
-    else if (consume(TokenType::KW_ByVal)) {}
+    if (consume(TokenType::KW_ByRef))
+      is_ref = true;
+    else if (consume(TokenType::KW_ByVal)) {
+    }
     if (current.type != TokenType::Ident)
-      return std::unexpected(Error{"Expected parameter name", current.start, current.end});
+      return std::unexpected(
+        Error{ "Expected parameter name", current.start, current.end });
     std::string p_name = current.text;
     advance();
     std::optional<std::string> p_type{};

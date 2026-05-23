@@ -210,6 +210,8 @@ std::expected<Token, Error> Lexer::read_operator() {
     return Token{TokenType::RParen, ")", 0, 0, {line, start_col}, {line, col}};
   if (c == ',')
     return Token{TokenType::Comma, ",", 0, 0, {line, start_col}, {line, col}};
+  if (c == '.')
+    return Token{TokenType::Dot, ".", 0, 0, {line, start_col}, {line, col}};
   if (c == ':')
     return Token{TokenType::Colon, ":", 0, 0, {line, start_col}, {line, col}};
   if (c == '&')

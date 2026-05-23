@@ -51,6 +51,8 @@ struct Instruction {
     DefineVar,
     StoreVar,
     Deref,
+    Member,
+    Dispatch,
     LoadConst,
     Pop,
     Label,
@@ -81,6 +83,10 @@ struct LoopLabels {
   std::uint16_t break_lbl;
 };
 
+enum PeaBuiltinIdentifier {
+  PEA_ID_LENGTH = (1 << 16) - 1
+};
+
 class IrGen {
 public:
   std::expected<ProgramIr, Error> generate(Program const &prog);
@@ -92,7 +98,9 @@ private:
 
   std::vector<Instruction> prog;
 
-  std::unordered_map<std::string, std::uint16_t> variables{};
+  std::unordered_map<std::string, std::uint16_t> variables{
+    {"length", PEA_ID_LENGTH}
+  };
   std::uint16_t var_next{};
   std::uint16_t var_register(std::string const &name);
   std::optional<std::uint16_t> var_get(std::string const &name);
@@ -107,7 +115,7 @@ private:
   std::uint16_t label_get();
 
   std::unordered_map<std::string, std::uint16_t> types{
-    { "number", 0 }, { "char", 1 }, { "string", 2}
+    { "number", 0 }, { "char", 1 }, { "string", 2}, {"array", 3}
   };
   std::optional<std::uint16_t> resolve_type(std::string const &name);
 

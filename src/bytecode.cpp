@@ -162,6 +162,10 @@ void BytecodeEmitter::emit_body(
     case Instruction::Deref:
       out.push_back(static_cast<std::uint8_t>(OpCode::Deref));
       break;
+    case Instruction::Member:
+      out.push_back(static_cast<std::uint8_t>(OpCode::Member));
+      emit_le(out, out.end(), static_cast<std::uint16_t>(instr.data));
+      break;
     case Instruction::LoadVar:
       out.push_back(static_cast<std::uint8_t>(OpCode::LoadVar));
       emit_le(out, out.end(), static_cast<std::uint16_t>(instr.data));
@@ -231,6 +235,12 @@ void BytecodeEmitter::emit_body(
         out.push_back(static_cast<std::uint8_t>(OpCode::LoadNull));
       out.push_back(static_cast<std::uint8_t>(OpCode::Return));
       break;
+    case Instruction::Dispatch: {
+      out.push_back(static_cast<std::uint8_t>(OpCode::Dispatch));
+      emit_le(out, out.end(), static_cast<std::uint16_t>(instr.data));
+      auto argc_ext = *(++it);
+      emit_le(out, out.end(), static_cast<std::uint16_t>(argc_ext.data));
+    } break;
     case Instruction::Extension:
       assert(false && "Extensions are pulled earlier, can't reach");
     }
