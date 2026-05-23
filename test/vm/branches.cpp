@@ -123,6 +123,17 @@ void test_branches() {
     expect(vm.variables[0].is_num() && vm.variables[0].num() == 55.0);
   }
   {
+    Vm vm = vm_run("dim x\n"
+                   "sub triangle(n, byref sum)\n"
+                   "if n > 0 then\n"
+		   "let sum = sum + n\n"
+		   "triangle(n - 1, sum)\n"
+                   "end if\n"
+                   "end sub\n"
+                   "triangle(10, x)\n");
+    expect(vm.variables[0].is_num() && vm.variables[0].num() == 55.0);    
+  }
+  {
     Vm vm = vm_run("dim arr(5, 5)\n"
                    "for i = 1 to 5\n"
                    "for j = 1 to 5\n"

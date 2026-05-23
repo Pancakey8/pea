@@ -83,6 +83,7 @@ struct LabelStmt {
 struct Parameter {
   std::string name;
   std::optional<std::string> type;
+  bool is_ref;
 };
 struct SubDecl {
   std::string name;

@@ -5,6 +5,7 @@
 #include <iostream>
 #include <ranges>
 #include <utility>
+#include <variant>
 
 template <class... Fs> struct Overloaded : Fs... {
   using Fs::operator()...;
@@ -262,6 +263,9 @@ std::expected<void, Error> IrGen::emit(Stmt const &stmt) {
                 stmt.range.start.col });
           prog.push_back({ Instruction::Extension, *type });
         }
+        if (!param.is_ref) {
+          prog.push_back({ Instruction::Deref, var });
+        }
         prog.push_back({ Instruction::StoreVar, var });
       }
 
@@ -404,8 +408,13 @@ std::expected<void, Error> IrGen::emit(Expr const &expr) {
     },
     [&](Call const &e) -> std::expected<void, Error> {
       for (auto const &arg : e.args) {
-        if (auto res = emit(*arg); !res)
-          return std::unexpected(res.error());
+        if (auto const var = std::get_if<Variable>(&arg->data)) {
+          std::uint16_t id = var_register(var->name);
+          prog.push_back({ Instruction::LoadRef, id });
+        } else {
+          if (auto res = emit(*arg); !res)
+            return std::unexpected(res.error());
+        }
       }
       if (auto res = emit(*e.callee); !res)
         return std::unexpected(res.error());
@@ -611,6 +620,15 @@ void print_instr(std::ostream &os, It &it, ProgramIr const &ir) {
   } break;
   case Instruction::Call:
     os << "CALL " << instr.data << "\n";
+    break;
+  case Instruction::LoadRef: {
+    auto name = std::find_if(ir.vars.begin(),
+      ir.vars.end(),
+      [&instr](auto const &p) { return p.second == instr.data; });
+    os << "LOAD_REF " << instr.data << "[" << name->first << "]\n";
+  } break;
+  case Instruction::Deref:
+    os << "DEREF\n";
     break;
   case Instruction::Return:
     os << "RETURN " << instr.data << "\n";

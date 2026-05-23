@@ -1,12 +1,10 @@
-dim x(2, 3, 3)
-
-for i = 1 to 2
-  for j = 1 to 3
-    for k = 1 to 3
-      let x(i, j, k) = i * j * k
-    end for
+sub fill(n, byval arr)
+  for i = 1 to n
+    let arr(i) = i
   end for
-end for
+end sub
 
-x
+dim series(10)
+fill(10, series)
+series
 

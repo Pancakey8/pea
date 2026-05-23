@@ -21,6 +21,7 @@ struct PeaNaN {
   static PeaNaN of_func(std::size_t sz);
   static PeaNaN of_null();
   static PeaNaN of_array(Array *arr);
+  static PeaNaN of_ref(PeaNaN *ref);
 
   bool is_num() const;
   bool is_null() const;
@@ -28,12 +29,14 @@ struct PeaNaN {
   bool is_str() const;
   bool is_fn() const;
   bool is_arr() const;
+  bool is_ref() const;
 
   double num() const;
   char chr() const;
   std::string *str() const;
   std::size_t fn() const;
   Array *arr() const;
+  PeaNaN *ref() const;
 
   std::optional<double> coerce_num() const;
   std::optional<char> coerce_chr() const;
@@ -71,6 +74,7 @@ private:
   void var_set(std::size_t id, PeaNaN val);
   void var_def(std::size_t id);
   PeaNaN var_get(std::size_t id);
+  PeaNaN var_ref(std::size_t id);
 
   size_t ip{};
 };

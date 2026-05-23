@@ -157,7 +157,8 @@ std::expected<Token, Error> Lexer::read_ident_or_keyword() {
       {"mod", TokenType::KW_Mod},     {"and", TokenType::KW_And},
       {"or", TokenType::KW_Or},       {"not", TokenType::KW_Not},
       {"sub", TokenType::KW_Sub},     {"return", TokenType::KW_Return},
-      {"break", TokenType::KW_Break}, {"continue", TokenType::KW_Continue}};
+      {"break", TokenType::KW_Break}, {"continue", TokenType::KW_Continue},
+      {"byref", TokenType::KW_ByRef}, {"byval", TokenType::KW_ByVal},};
 
   if (auto it = keywords.find(lower); it != keywords.end()) {
     // Special handling for "end if", "end for", and "end sub"

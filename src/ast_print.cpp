@@ -284,6 +284,7 @@ struct StmtPrinter {
         op_json_str(os, *s.params[i].type);
       else
         os << "null";
+      os << ",\"is_ref\":" << s.params[i].is_ref;
       os << "}";
       if (i < s.params.size() - 1)
         os << ",";

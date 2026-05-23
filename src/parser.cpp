@@ -583,7 +583,12 @@ std::expected<StmtPtr, Error> Parser::parse_sub() {
     return std::unexpected(Error{ "Expected '('", current.start, current.end });
 
   std::vector<Parameter> params;
-  while (current.type == TokenType::Ident) {
+  while (current.type == TokenType::Ident || current.type == TokenType::KW_ByRef || current.type == TokenType::KW_ByVal) {
+    bool is_ref = false;
+    if (consume(TokenType::KW_ByRef)) is_ref = true;
+    else if (consume(TokenType::KW_ByVal)) {}
+    if (current.type != TokenType::Ident)
+      return std::unexpected(Error{"Expected parameter name", current.start, current.end});
     std::string p_name = current.text;
     advance();
     std::optional<std::string> p_type{};
@@ -594,7 +599,7 @@ std::expected<StmtPtr, Error> Parser::parse_sub() {
       p_type = current.text;
       advance();
     }
-    params.push_back({ p_name, p_type });
+    params.push_back({ p_name, p_type, is_ref });
     if (!consume(TokenType::Comma))
       break;
   }

@@ -159,8 +159,15 @@ void BytecodeEmitter::emit_body(
     case Instruction::Not:
       out.push_back(static_cast<std::uint8_t>(OpCode::Not));
       break;
+    case Instruction::Deref:
+      out.push_back(static_cast<std::uint8_t>(OpCode::Deref));
+      break;
     case Instruction::LoadVar:
       out.push_back(static_cast<std::uint8_t>(OpCode::LoadVar));
+      emit_le(out, out.end(), static_cast<std::uint16_t>(instr.data));
+      break;
+    case Instruction::LoadRef:
+      out.push_back(static_cast<std::uint8_t>(OpCode::LoadRef));
       emit_le(out, out.end(), static_cast<std::uint16_t>(instr.data));
       break;
     case Instruction::DefineVar: {

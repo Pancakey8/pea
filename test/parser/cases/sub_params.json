@@ -1,1 +1,1 @@
-{"statements":[{"type":"SubDecl","name":"add","params":[{"name":"a","type":"int"},{"name":"b","type":null}],"body":[{"type":"ReturnStmt","value":{"type":"BinaryOp","op":"Plus","left":{"type":"Variable","name":"a"},"right":{"type":"Variable","name":"b"}}}]}]}
+{"statements":[{"type":"SubDecl","name":"add","params":[{"name":"a","type":"int","is_ref":0},{"name":"b","type":null,"is_ref":1}],"body":[{"type":"ReturnStmt","value":{"type":"BinaryOp","op":"Plus","left":{"type":"Variable","name":"a"},"right":{"type":"Variable","name":"b"}}}]}]}

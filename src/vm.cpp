@@ -20,7 +20,8 @@ enum Tag : std::uint64_t {
   TAG_CHAR = 2,
   TAG_STR = 3,
   TAG_FN = 4,
-  TAG_ARR = 5
+  TAG_ARR = 5,
+  TAG_REF = 6
 };
 
 constexpr std::uint64_t make_tag(Tag t) {
@@ -54,6 +55,11 @@ PeaNaN PeaNaN::of_array(Array *arr) {
            (reinterpret_cast<std::uint64_t>(arr) & PAYLOAD_MASK) };
 }
 
+PeaNaN PeaNaN::of_ref(PeaNaN *ref) {
+  return { QNAN | make_tag(TAG_REF) |
+           (reinterpret_cast<std::uint64_t>(ref) & PAYLOAD_MASK) };
+}
+
 bool PeaNaN::is_num() const { return !is_boxed(bits); }
 
 bool PeaNaN::is_chr() const {
@@ -71,8 +77,13 @@ bool PeaNaN::is_null() const {
 bool PeaNaN::is_fn() const {
   return is_boxed(bits) && ((bits & TAG_MASK) == make_tag(TAG_FN));
 }
+
 bool PeaNaN::is_arr() const {
   return is_boxed(bits) && ((bits & TAG_MASK) == make_tag(TAG_ARR));
+}
+
+bool PeaNaN::is_ref() const {
+  return is_boxed(bits) && ((bits & TAG_MASK) == make_tag(TAG_REF));
 }
 
 std::size_t PeaNaN::fn() const {
@@ -98,6 +109,14 @@ std::string *PeaNaN::str() const {
 char PeaNaN::chr() const { return static_cast<char>(bits & 0xFF); }
 
 double PeaNaN::num() const { return std::bit_cast<double>(bits); }
+
+PeaNaN *PeaNaN::ref() const {
+  std::uint64_t raw = bits & PAYLOAD_MASK;
+  if (raw & (1ULL << 47)) {
+    raw |= 0xFFFF000000000000ULL;
+  }
+  return reinterpret_cast<PeaNaN *>(raw);
+}
 
 std::optional<double> PeaNaN::coerce_num() const {
   if (is_num()) {
@@ -429,10 +448,21 @@ void Vm::run() {
       auto b = op.is_truthy();
       stack.push_back(PeaNaN::of_double(!b));
     } break;
+    case OpCode::Deref: {
+      auto op = stack.back();
+      if (op.is_ref()) {
+        stack.pop_back();
+        stack.push_back(*op.ref());
+      }
+    } break;
     case OpCode::LoadVar: {
       std::cout << "LoadVar:\n";
       auto var = read<std::uint16_t>();
       stack.push_back(var_get(var));
+    } break;
+    case OpCode::LoadRef: {
+      auto var = read<std::uint16_t>();
+      stack.push_back(var_ref(var));
     } break;
     case OpCode::DefineVar: {
       std::cout << "DefineVar:\n";
@@ -668,13 +698,21 @@ void Vm::var_set(std::size_t id, PeaNaN val) {
     auto bot = call_stack.back().shadows_at;
     for (std::size_t i = bot; i < shadow_stack.size(); ++i) {
       if (shadow_stack[i].first == id) {
-        shadow_stack[i].second = val;
+        if (shadow_stack[i].second.is_ref()) {
+	  *shadow_stack[i].second.ref() = val;
+        } else {
+          shadow_stack[i].second = val;
+        }
         return;
       }
     }
   }
 
-  variables[id] = val;
+  if (variables[id].is_ref()) {
+    *variables[id].ref() = val;
+  } else {
+    variables[id] = val;
+  }
 }
 
 void Vm::var_def(std::size_t id) {
@@ -694,12 +732,31 @@ PeaNaN Vm::var_get(std::size_t id) {
     auto bot = call_stack.back().shadows_at;
     for (std::size_t i = bot; i < shadow_stack.size(); ++i) {
       if (shadow_stack[i].first == id) {
-        return shadow_stack[i].second;
+        if (shadow_stack[i].second.is_ref()) {
+          return *shadow_stack[i].second.ref();
+        } else {
+          return shadow_stack[i].second;
+        }
       }
     }
   }
 
-  return variables[id];
+  return variables[id].is_ref() ? *variables[id].ref() : variables[id];
+}
+
+PeaNaN Vm::var_ref(std::size_t id) {
+  if (!call_stack.empty()) {
+    auto bot = call_stack.back().shadows_at;
+    for (std::size_t i = bot; i < shadow_stack.size(); ++i) {
+      if (shadow_stack[i].first == id) {
+        if (shadow_stack[i].second.is_ref())
+          return shadow_stack[i].second;
+        return PeaNaN::of_ref(&shadow_stack[i].second);
+      }
+    }
+  }
+
+  return variables[id].is_ref() ? variables[id] : PeaNaN::of_ref(&variables[id]);
 }
 
 template <typename Int> Int Vm::read() {

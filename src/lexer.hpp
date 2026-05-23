@@ -52,6 +52,8 @@ enum class TokenType {
   KW_Return,
   KW_Break,
   KW_Continue,
+  KW_ByRef,
+  KW_ByVal,
   // Operators
   Plus,
   Minus,
