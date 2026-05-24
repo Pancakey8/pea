@@ -210,7 +210,9 @@ Vm::Vm(std::vector<std::uint8_t> bytes)
       { PEA_ID_ISTRUTHY, BuiltinFns::STRING_ISTRUTHY } }
   };
   vtables[static_cast<std::uint16_t>(InternalObj::Array)] = {
-    { { PEA_ID_AT, BuiltinFns::ARRAY_AT } }
+    { { PEA_ID_AT, BuiltinFns::ARRAY_AT },
+      { PEA_ID_TOSTRING, BuiltinFns::ARRAY_TOSTRING },
+      { PEA_ID_ISTRUTHY, BuiltinFns::ARRAY_ISTRUTHY } }
   };
   vtables[static_cast<std::uint16_t>(InternalObj::Char)] = {
     { { PEA_ID_TOSTRING, BuiltinFns::CHAR_TOSTRING },
