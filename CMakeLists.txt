@@ -21,7 +21,7 @@ add_library(pea-bytecode src/bytecode.cpp)
 target_include_directories(pea-bytecode PUBLIC src/)
 target_link_libraries(pea-bytecode pea-irgen)
 
-add_library(pea-vm src/vm.cpp)
+add_library(pea-vm src/vm.cpp src/builtins.cpp)
 target_include_directories(pea-vm PUBLIC src/)
 target_link_libraries(pea-vm pea-bytecode)
 

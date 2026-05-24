@@ -1,0 +1,203 @@
+#include "lexer.hpp"
+#include "vm.hpp"
+
+#include <cassert>
+#include <print>
+#include <system_error>
+
+PeaNaN BuiltinFns::array_at(Vm &vm, std::uint16_t argc) {
+  auto self = vm.stack.back();
+  vm.stack.pop_back();
+  auto dimc = argc - 1;
+  auto arr = reinterpret_cast<PeaObjArray *>(self.obj());
+  if (dimc != arr->dim) {
+    vm.error("Indexing array of wrong dimensions");
+    return PeaNaN::of_null();
+  }
+  std::size_t step = 1;
+  std::size_t ind = 0;
+  for (std::size_t i = 0; i < dimc; ++i) {
+    auto n = vm.stack[vm.stack.size() - i - 1].coerce_num(vm);
+    if (!n) {
+      vm.error("Trying to index array with non-number");
+      return PeaNaN::of_null();
+    }
+    if (*n < 0 || *n > arr->dims[dimc - 1 - i]) {
+      vm.error("Indexing out of bounds");
+      return PeaNaN::of_null();
+    }
+    ind += step * (*n - 1);
+    step *= arr->dims[dimc - 1 - i];
+  }
+  return arr->elems[ind];
+}
+
+std::string to_string(PeaNaN val);
+
+void array_to_string_helper(const PeaObjArray *arr,
+  std::size_t current_dim,
+  std::size_t &flat_index,
+  std::string &out) {
+  // Base case: We reached the leaf level, print the elements of the last
+  // dimension
+  if (current_dim == arr->dim - 1) {
+    out += "[";
+    for (std::size_t i = 0; i < arr->dims[current_dim]; ++i) {
+      // Convert the individual PeaNaN element to string (calling your main
+      // function)
+      out += to_string(arr->elems[flat_index++]);
+      if (i < arr->dims[current_dim] - 1) {
+        out += ", ";
+      }
+    }
+    out += "]";
+    return;
+  }
+
+  // Step case: Recursively wrap inner dimensions
+  out += "[";
+  for (std::size_t i = 0; i < arr->dims[current_dim]; ++i) {
+    array_to_string_helper(arr, current_dim + 1, flat_index, out);
+    if (i < arr->dims[current_dim] - 1) {
+      out += ", ";
+    }
+  }
+  out += "]";
+}
+
+std::string to_string(PeaNaN val) {
+  if (val.is_num()) {
+    return std::format("{:g}", val.num());
+  } else if (val.is_chr()) {
+    return std::string(1, val.chr());
+  } else if (val.is_null()) {
+    return "null";
+  } else if (val.is_fn()) {
+    return "<function>";
+  } else if (val.is_obj()) {
+    switch (static_cast<InternalObj>(val.obj()->kind)) {
+    case InternalObj::String:
+      return std::string(reinterpret_cast<char *>(
+        reinterpret_cast<PeaObjString *>(val.obj())->str));
+      break;
+    case InternalObj::Array: {
+      auto arr = reinterpret_cast<PeaObjArray *>(val.obj());
+      // Edge case: Empty array or 0 dimensions
+      if (arr->dim == 0 || arr->len == 0) {
+        return "[]";
+      }
+
+      std::string result;
+      std::size_t flat_index = 0;
+      array_to_string_helper(arr, 0, flat_index, result);
+      return result;
+    } break;
+    default:
+      assert(false && "General object");
+      break;
+    }
+  }
+  return "";
+}
+
+PeaNaN BuiltinFns::println(Vm &vm, std::uint16_t argc) {
+  for (std::uint16_t i = 0; i < argc; ++i) {
+    auto val = vm.stack[vm.stack.size() - argc + i];
+    if (val.is_ref()) {
+      std::println("{}", to_string(*val.ref()));
+    } else {
+      std::println("{}", to_string(val));
+    }
+  }
+  return PeaNaN::of_null();
+}
+
+PeaNaN BuiltinFns::array_tostring(Vm &vm, std::uint16_t argc) {
+  auto o = vm.stack.back();
+  auto str = to_string(o);
+  auto s = PeaObjString::make(str.size(), str.c_str());
+  return PeaNaN::of_obj(reinterpret_cast<PeaObject *>(s));
+}
+
+PeaNaN BuiltinFns::num_tostring(Vm &vm, std::uint16_t argc) {
+  auto o = vm.stack.back();
+  auto str = to_string(o);
+  auto s = PeaObjString::make(str.size(), str.c_str());
+  return PeaNaN::of_obj(reinterpret_cast<PeaObject *>(s));
+}
+
+PeaNaN BuiltinFns::null_tostring(Vm &vm, std::uint16_t argc) {
+  auto o = vm.stack.back();
+  auto str = to_string(o);
+  auto s = PeaObjString::make(str.size(), str.c_str());
+  return PeaNaN::of_obj(reinterpret_cast<PeaObject *>(s));
+}
+
+PeaNaN BuiltinFns::char_tostring(Vm &vm, std::uint16_t argc) {
+  auto o = vm.stack.back();
+  auto str = to_string(o);
+  auto s = PeaObjString::make(str.size(), str.c_str());
+  return PeaNaN::of_obj(reinterpret_cast<PeaObject *>(s));
+}
+
+PeaNaN BuiltinFns::string_tostring(Vm &vm, std::uint16_t argc) {
+  auto o = vm.stack.back();
+  auto str = to_string(o);
+  auto s = PeaObjString::make(str.size(), str.c_str());
+  return PeaNaN::of_obj(reinterpret_cast<PeaObject *>(s));
+}
+
+PeaNaN BuiltinFns::function_tostring(Vm &vm, std::uint16_t argc) {
+  auto o = vm.stack.back();
+  auto str = to_string(o);
+  auto s = PeaObjString::make(str.size(), str.c_str());
+  return PeaNaN::of_obj(reinterpret_cast<PeaObject *>(s));
+}
+
+PeaNaN BuiltinFns::num_tonum(Vm &vm, std::uint16_t argc) {
+  return vm.stack.back();
+}
+
+PeaNaN BuiltinFns::char_tonum(Vm &vm, std::uint16_t argc) {
+  return PeaNaN::of_double(static_cast<double>(vm.stack.back().chr()));
+}
+
+PeaNaN BuiltinFns::null_tonum(Vm &vm, std::uint16_t argc) {
+  return PeaNaN::of_double(0);
+}
+
+PeaNaN BuiltinFns::string_tonum(Vm &vm, std::uint16_t argc) {
+  auto str = reinterpret_cast<PeaObjString *>(vm.stack.back().obj());
+  double res;
+  auto [_, ec] = std::from_chars(str->str, str->str + str->len, res);
+  if (ec == std::errc()) {
+    return PeaNaN::of_double(res);
+  } else {
+    return PeaNaN::of_null();
+  }
+}
+
+PeaNaN BuiltinFns::array_istruthy(Vm &vm, std::uint16_t argc) {
+  return PeaNaN::of_double(1);
+}
+
+PeaNaN BuiltinFns::num_istruthy(Vm &vm, std::uint16_t argc) {
+  return PeaNaN::of_double(vm.stack.back().num() != 0);
+}
+
+PeaNaN BuiltinFns::null_istruthy(Vm &vm, std::uint16_t argc) {
+  return PeaNaN::of_double(0);
+}
+
+PeaNaN BuiltinFns::char_istruthy(Vm &vm, std::uint16_t argc) {
+  return PeaNaN::of_double(vm.stack.back().chr() != '\0');
+}
+
+PeaNaN BuiltinFns::string_istruthy(Vm &vm, std::uint16_t argc) {
+  auto str = reinterpret_cast<PeaObjString *>(vm.stack.back().obj());
+  return PeaNaN::of_double(str->len != 0);
+}
+
+PeaNaN BuiltinFns::function_istruthy(Vm &vm, std::uint16_t argc) {
+  return PeaNaN::of_double(1);
+}

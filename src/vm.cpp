@@ -100,68 +100,138 @@ PeaNaN *PeaNaN::ref() const {
   return reinterpret_cast<PeaNaN *>(raw);
 }
 
-std::optional<double> PeaNaN::coerce_num() const {
+PeaNaN PeaNaN::get_member(Vm &vm, std::uint16_t id) {
+  if (!is_obj())
+    return PeaNaN::of_null();
+  auto val = obj();
+  switch (static_cast<InternalObj>(val->kind)) {
+  case InternalObj::String: {
+    if (id == PEA_ID_LENGTH) {
+      return PeaNaN::of_double(reinterpret_cast<PeaObjString *>(val)->len);
+    } else {
+      return PeaNaN::of_null();
+    }
+  } break;
+  case InternalObj::Array: {
+    if (id == PEA_ID_LENGTH) {
+      return PeaNaN::of_double(reinterpret_cast<PeaObjArray *>(val)->len);
+    } else {
+      return PeaNaN::of_null();
+    }
+  } break;
+
+  default:
+    assert(false && "TODO: General objects");
+    break;
+  }
+}
+
+std::optional<std::size_t> PeaNaN::get_method(Vm &vm, std::uint16_t id) {
+  PeaVTable table;
   if (is_num()) {
+    table = vm.vtables[static_cast<std::uint16_t>(InternalObj::Number)];
+  } else if (is_chr()) {
+    table = vm.vtables[static_cast<std::uint16_t>(InternalObj::Char)];
+  } else if (is_fn()) {
+    table = vm.vtables[static_cast<std::uint16_t>(InternalObj::Function)];
+  } else if (is_null()) {
+    table = vm.vtables[static_cast<std::uint16_t>(InternalObj::Null)];
+  } else if (is_obj()) {
+    table = vm.vtables[obj()->kind];
+  }
+
+  if (auto it = std::find_if(table.table.begin(),
+        table.table.end(),
+        [id](auto x) { return x.first == id; });
+    it != table.table.end()) {
+    return it->second;
+  }
+
+  return {};
+}
+
+std::optional<double> PeaNaN::coerce_num(Vm &vm) {
+  if (is_num())
     return num();
-  } else if (is_chr()) {
-    return static_cast<double>(chr());
-  } else if (is_null()) {
-    return 0;
-  } else if (is_fn()) {
+
+  if (auto meth = get_method(vm, PEA_ID_TONUM)) {
+    vm.stack.push_back(*this);
+    vm.dispatch_call(PeaNaN::of_func(*meth), 1);
+    auto val = vm.stack.back();
+    vm.stack.pop_back();
+    if (!val.is_num())
+      return {};
+    return val.num();
+  } else {
     return {};
   }
-
-  return {};
 }
 
-std::optional<char> PeaNaN::coerce_chr() const {
-  if (is_num()) {
-    return static_cast<char>(num());
-  } else if (is_chr()) {
-    return chr();
-  } else if (is_null()) {
-    return '\0';
-  } else if (is_fn()) {
-    return {};
-  }
-
-  return {};
-}
-
-bool PeaNaN::is_truthy() const {
-  if (is_num()) {
-    return num() != 0;
-  } else if (is_chr()) {
-    return chr() != '\0';
-  } else if (is_null()) {
+bool PeaNaN::is_truthy(Vm &vm) {
+  if (auto meth = get_method(vm, PEA_ID_ISTRUTHY)) {
+    vm.stack.push_back(*this);
+    vm.dispatch_call(PeaNaN::of_func(*meth), 1);
+    auto val = vm.stack.back();
+    vm.stack.pop_back();
+    if (!val.is_num())
+      return false;
+    return val.num() != 0;
+  } else {
     return false;
-  } else if (is_fn()) {
-    return true;
   }
-
-  return false;
 }
 
-bool PeaNaN::operator==(PeaNaN const &other) const {
-  if (is_num() && other.is_num())
-    return num() == other.num();
+PeaObjString *PeaObjString::make(std::size_t len, char const *data) {
+  auto mem = std::malloc(offsetof(PeaObjString, str) + len + 1);
+  PeaObjString *obj = ::new (mem) PeaObjString;
+  obj->kind = static_cast<std::uint16_t>(InternalObj::String);
+  obj->len = len;
+  std::memcpy(obj->str, data, len);
+  obj->str[obj->len] = '\0';
+  return obj;
+}
 
-  if (is_null() && other.is_null())
-    return true;
-
-  if (is_chr() && other.is_chr())
-    return chr() == other.chr();
-
-  return false;
+PeaObjArray *PeaObjArray::make(
+  std::size_t dim, std::size_t *dims, std::size_t len) {
+  auto mem = std::malloc(offsetof(PeaObjArray, elems) + len * sizeof(PeaNaN));
+  PeaObjArray *arr = ::new (mem) PeaObjArray;
+  arr->kind = static_cast<std::uint16_t>(InternalObj::Array);
+  arr->dim = dim;
+  arr->dims = dims;
+  arr->len = len;
+  return arr;
 }
 
 Vm::Vm(std::vector<std::uint8_t> bytes)
     : bytes(std::move(bytes)), variables{ 1ULL << 16, PeaNaN::of_null() } {
-  vtables[static_cast<std::uint16_t>(InternalObj::String)] = { {} };
-  vtables[static_cast<std::uint16_t>(InternalObj::Array)] = {
-    { { PEA_ID_AT, (1ULL << 48) - 1 } }
+  vtables[static_cast<std::uint16_t>(InternalObj::String)] = {
+    { { PEA_ID_TOSTRING, BuiltinFns::STRING_TOSTRING },
+      { PEA_ID_TONUM, BuiltinFns::STRING_TONUM },
+      { PEA_ID_ISTRUTHY, BuiltinFns::STRING_ISTRUTHY } }
   };
-  variables[PEA_ID_PRINTLN] = PeaNaN::of_func((1ULL << 48) - 2);
+  vtables[static_cast<std::uint16_t>(InternalObj::Array)] = {
+    { { PEA_ID_AT, BuiltinFns::ARRAY_AT } }
+  };
+  vtables[static_cast<std::uint16_t>(InternalObj::Char)] = {
+    { { PEA_ID_TOSTRING, BuiltinFns::CHAR_TOSTRING },
+      { PEA_ID_TONUM, BuiltinFns::CHAR_TONUM },
+      { PEA_ID_ISTRUTHY, BuiltinFns::CHAR_ISTRUTHY } }
+  };
+  vtables[static_cast<std::uint16_t>(InternalObj::Number)] = {
+    { { PEA_ID_TOSTRING, BuiltinFns::NUM_TOSTRING },
+      { PEA_ID_TONUM, BuiltinFns::NUM_TONUM },
+      { PEA_ID_ISTRUTHY, BuiltinFns::NUM_ISTRUTHY } }
+  };
+  vtables[static_cast<std::uint16_t>(InternalObj::Function)] = {
+    { { PEA_ID_TOSTRING, BuiltinFns::FUNCTION_TOSTRING },
+      { PEA_ID_ISTRUTHY, BuiltinFns::FUNCTION_ISTRUTHY } }
+  };
+  vtables[static_cast<std::uint16_t>(InternalObj::Null)] = {
+    { { PEA_ID_TOSTRING, BuiltinFns::NULL_TOSTRING },
+      { PEA_ID_TONUM, BuiltinFns::NULL_TONUM },
+      { PEA_ID_ISTRUTHY, BuiltinFns::NULL_ISTRUTHY } }
+  };
+  variables[PEA_ID_PRINTLN] = PeaNaN::of_func(BuiltinFns::PRINTLN);
   move_start();
 }
 
@@ -175,8 +245,8 @@ void Vm::run() {
       stack.pop_back();
       auto left = stack.back();
       stack.pop_back();
-      auto opr = right.coerce_num();
-      auto opl = left.coerce_num();
+      auto opr = right.coerce_num(*this);
+      auto opl = left.coerce_num(*this);
       if (!opr || !opl)
         return error("'+' requires number, number");
       stack.push_back(PeaNaN::of_double(*opl + *opr));
@@ -186,8 +256,8 @@ void Vm::run() {
       stack.pop_back();
       auto left = stack.back();
       stack.pop_back();
-      auto opr = right.coerce_num();
-      auto opl = left.coerce_num();
+      auto opr = right.coerce_num(*this);
+      auto opl = left.coerce_num(*this);
       if (!opr || !opl)
         return error("'-' requires number, number");
       stack.push_back(PeaNaN::of_double(*opl - *opr));
@@ -197,8 +267,8 @@ void Vm::run() {
       stack.pop_back();
       auto left = stack.back();
       stack.pop_back();
-      auto opr = right.coerce_num();
-      auto opl = left.coerce_num();
+      auto opr = right.coerce_num(*this);
+      auto opl = left.coerce_num(*this);
       if (!opr || !opl)
         return error("'*' requires number, number");
       stack.push_back(PeaNaN::of_double(*opl * *opr));
@@ -208,8 +278,8 @@ void Vm::run() {
       stack.pop_back();
       auto left = stack.back();
       stack.pop_back();
-      auto opr = right.coerce_num();
-      auto opl = left.coerce_num();
+      auto opr = right.coerce_num(*this);
+      auto opl = left.coerce_num(*this);
       if (!opr || !opl)
         return error("'/' requires number, number");
       stack.push_back(PeaNaN::of_double(*opl / *opr));
@@ -219,8 +289,8 @@ void Vm::run() {
       stack.pop_back();
       auto left = stack.back();
       stack.pop_back();
-      auto opr = right.coerce_num();
-      auto opl = left.coerce_num();
+      auto opr = right.coerce_num(*this);
+      auto opl = left.coerce_num(*this);
       if (!opr || !opl)
         return error("'\\' requires number, number");
       stack.push_back(PeaNaN::of_double(std::trunc(*opl / *opr)));
@@ -230,8 +300,8 @@ void Vm::run() {
       stack.pop_back();
       auto left = stack.back();
       stack.pop_back();
-      auto opr = right.coerce_num();
-      auto opl = left.coerce_num();
+      auto opr = right.coerce_num(*this);
+      auto opl = left.coerce_num(*this);
       if (!opr || !opl)
         return error("'^' requires number, number");
       stack.push_back(PeaNaN::of_double(std::pow(*opl, *opr)));
@@ -241,8 +311,8 @@ void Vm::run() {
       stack.pop_back();
       auto left = stack.back();
       stack.pop_back();
-      auto opr = right.coerce_num();
-      auto opl = left.coerce_num();
+      auto opr = right.coerce_num(*this);
+      auto opl = left.coerce_num(*this);
       if (!opr || !opl)
         return error("'mod' requires number, number");
       stack.push_back(PeaNaN::of_double(std::fmod(*opl, *opr)));
@@ -252,8 +322,8 @@ void Vm::run() {
       stack.pop_back();
       auto left = stack.back();
       stack.pop_back();
-      auto opr = right.is_truthy();
-      auto opl = left.is_truthy();
+      auto opr = right.is_truthy(*this);
+      auto opl = left.is_truthy(*this);
       stack.push_back(PeaNaN::of_double(opl && opr));
     } break;
     case OpCode::Or: {
@@ -261,8 +331,8 @@ void Vm::run() {
       stack.pop_back();
       auto left = stack.back();
       stack.pop_back();
-      auto opr = right.is_truthy();
-      auto opl = left.is_truthy();
+      auto opr = right.is_truthy(*this);
+      auto opl = left.is_truthy(*this);
       stack.push_back(PeaNaN::of_double(opl || opr));
     } break;
     case OpCode::Eq: {
@@ -270,22 +340,22 @@ void Vm::run() {
       stack.pop_back();
       auto left = stack.back();
       stack.pop_back();
-      stack.push_back(PeaNaN::of_double(left == right));
+      stack.push_back(PeaNaN::of_double(0));
     } break;
     case OpCode::Neq: {
       auto right = stack.back();
       stack.pop_back();
       auto left = stack.back();
       stack.pop_back();
-      stack.push_back(PeaNaN::of_double(left != right));
+      stack.push_back(PeaNaN::of_double(0));
     } break;
     case OpCode::Lt: {
       auto right = stack.back();
       stack.pop_back();
       auto left = stack.back();
       stack.pop_back();
-      auto opr = right.coerce_num();
-      auto opl = left.coerce_num();
+      auto opr = right.coerce_num(*this);
+      auto opl = left.coerce_num(*this);
       if (!opr || !opl)
         return error("'<' requires number, number");
       stack.push_back(PeaNaN::of_double(*opl < *opr));
@@ -295,8 +365,8 @@ void Vm::run() {
       stack.pop_back();
       auto left = stack.back();
       stack.pop_back();
-      auto opr = right.coerce_num();
-      auto opl = left.coerce_num();
+      auto opr = right.coerce_num(*this);
+      auto opl = left.coerce_num(*this);
       if (!opr || !opl)
         return error("'>' requires number, number");
       stack.push_back(PeaNaN::of_double(*opl > *opr));
@@ -306,8 +376,8 @@ void Vm::run() {
       stack.pop_back();
       auto left = stack.back();
       stack.pop_back();
-      auto opr = right.coerce_num();
-      auto opl = left.coerce_num();
+      auto opr = right.coerce_num(*this);
+      auto opl = left.coerce_num(*this);
       if (!opr || !opl)
         return error("'<=' requires number, number");
       stack.push_back(PeaNaN::of_double(*opl <= *opr));
@@ -317,8 +387,8 @@ void Vm::run() {
       stack.pop_back();
       auto left = stack.back();
       stack.pop_back();
-      auto opr = right.coerce_num();
-      auto opl = left.coerce_num();
+      auto opr = right.coerce_num(*this);
+      auto opl = left.coerce_num(*this);
       if (!opr || !opl)
         return error("'>=' requires number, number");
       stack.push_back(PeaNaN::of_double(*opl >= *opr));
@@ -333,7 +403,7 @@ void Vm::run() {
     case OpCode::Pos: {
       auto op = stack.back();
       stack.pop_back();
-      auto n = op.coerce_num();
+      auto n = op.coerce_num(*this);
       if (!n)
         return error("'+' requires number");
       stack.push_back(PeaNaN::of_double(*n));
@@ -341,7 +411,7 @@ void Vm::run() {
     case OpCode::Neg: {
       auto op = stack.back();
       stack.pop_back();
-      auto n = op.coerce_num();
+      auto n = op.coerce_num(*this);
       if (!n)
         return error("'-' requires number");
       stack.push_back(PeaNaN::of_double(-*n));
@@ -349,7 +419,7 @@ void Vm::run() {
     case OpCode::Not: {
       auto op = stack.back();
       stack.pop_back();
-      auto b = op.is_truthy();
+      auto b = op.is_truthy(*this);
       stack.push_back(PeaNaN::of_double(!b));
     } break;
     case OpCode::Deref: {
@@ -363,20 +433,13 @@ void Vm::run() {
       auto field = read<std::uint16_t>();
       auto obj = stack.back();
       stack.pop_back();
-      if (!obj.is_obj()) {
-        stack.push_back(PeaNaN::of_null());
-        break;
-      }
-
-      stack.push_back(member_get(obj.obj(), field));
+      stack.push_back(obj.get_member(*this, field));
     } break;
     case OpCode::Dispatch: {
       auto meth = read<std::uint16_t>();
       auto argc = read<std::uint16_t>();
       auto self = stack.back();
-      if (!self.is_obj())
-        return error("Dispatching non-existent method");
-      if (auto meth_off = member_get_method(self.obj(), meth)) {
+      if (auto meth_off = self.get_method(*this, meth)) {
         dispatch_call(PeaNaN::of_func(*meth_off), argc + 1);
       } else {
         return error("Dispatching non-existent method");
@@ -404,7 +467,7 @@ void Vm::run() {
         auto dims =
           static_cast<std::size_t *>(std::calloc(dim, sizeof(std::size_t)));
         for (std::uint16_t i = 0; i < dim; ++i) {
-          auto num = stack.back().coerce_num();
+          auto num = stack.back().coerce_num(*this);
           if (!num)
             return error("Array dimension must be a number");
           if (num < 0)
@@ -413,13 +476,7 @@ void Vm::run() {
           total *= *num;
           stack.pop_back();
         }
-        auto mem =
-          std::malloc(offsetof(PeaObjArray, elems) + total * sizeof(PeaNaN));
-        PeaObjArray *arr = ::new (mem) PeaObjArray;
-        arr->kind = static_cast<std::uint16_t>(InternalObj::Array);
-        arr->dim = dim;
-        arr->dims = dims;
-        arr->len = total;
+        auto arr = PeaObjArray::make(dim, dims, total);
         for (std::size_t i = 0; i < total; ++i)
           arr->elems[i] = PeaNaN::of_null();
 
@@ -447,7 +504,7 @@ void Vm::run() {
       std::size_t step = 1;
       std::size_t ind = 0;
       for (std::size_t i = 0; i < dimc; ++i) {
-        auto n = stack[stack.size() - i - 1].coerce_num();
+        auto n = stack[stack.size() - i - 1].coerce_num(*this);
         if (!n) {
           return error("Trying to index array with non-number");
         }
@@ -474,14 +531,9 @@ void Vm::run() {
       } break;
       case 2: { // String
         auto len = read_at<std::uint64_t>(off + 1);
-        auto mem = std::malloc(offsetof(PeaObjString, str) + len + 1);
-        PeaObjString *obj = ::new (mem) PeaObjString;
-        obj->kind = static_cast<std::uint16_t>(InternalObj::String);
-        obj->len = len;
-        std::memcpy(obj->str, reinterpret_cast<char *>(&bytes[off + 9]), len);
-        obj->str[obj->len] = '\0';
-
-        stack.push_back(PeaNaN::of_obj(reinterpret_cast<PeaObject *>(obj)));
+        auto str =
+          PeaObjString::make(len, reinterpret_cast<char *>(&bytes[off + 9]));
+        stack.push_back(PeaNaN::of_obj(reinterpret_cast<PeaObject *>(str)));
       } break;
       case 3: { // FuncPtr
         auto ptr = read_at<std::size_t>(off + 1);
@@ -520,7 +572,7 @@ void Vm::run() {
       auto argc = read<std::uint16_t>();
       auto callee = stack.back();
       if (callee.is_obj()) {
-        auto meth_at = member_get_method(callee.obj(), PEA_ID_AT);
+        auto meth_at = callee.get_method(*this, PEA_ID_AT);
         if (!meth_at)
           return error("Indexing non-indexable object");
         dispatch_call(PeaNaN::of_func(*meth_at), argc + 1);
@@ -627,41 +679,6 @@ PeaNaN Vm::var_ref(std::size_t id) {
                                 : PeaNaN::of_ref(&variables[id]);
 }
 
-PeaNaN Vm::member_get(PeaObject *val, std::uint16_t id) {
-  switch (static_cast<InternalObj>(val->kind)) {
-  case InternalObj::String: {
-    if (id == PEA_ID_LENGTH) {
-      return PeaNaN::of_double(reinterpret_cast<PeaObjString *>(val)->len);
-    } else {
-      return PeaNaN::of_null();
-    }
-  } break;
-  case InternalObj::Array: {
-    if (id == PEA_ID_LENGTH) {
-      return PeaNaN::of_double(reinterpret_cast<PeaObjArray *>(val)->len);
-    } else {
-      return PeaNaN::of_null();
-    }
-  } break;
-
-  default:
-    assert(false && "TODO: General objects");
-    break;
-  }
-}
-
-std::optional<std::size_t> Vm::member_get_method(
-  PeaObject *val, std::uint16_t id) {
-  if (auto it = std::find_if(vtables[val->kind].table.begin(),
-        vtables[val->kind].table.end(),
-        [id](auto x) { return x.first == id; });
-    it != vtables[val->kind].table.end()) {
-    return it->second;
-  }
-
-  return {};
-}
-
 void Vm::dispatch_call(PeaNaN callee, std::uint16_t argc) {
   if (callee.is_fn()) {
     if (callee.fn() > bytes.size()) {
@@ -698,111 +715,4 @@ template <typename Int> Int Vm::read_at(std::size_t pos) {
     std::reverse(b.begin(), b.end());
   }
   return std::bit_cast<Int>(b);
-}
-
-PeaNaN BuiltinFns::array_at(Vm &vm, std::uint16_t argc) {
-  auto self = vm.stack.back();
-  vm.stack.pop_back();
-  auto dimc = argc - 1;
-  auto arr = reinterpret_cast<PeaObjArray *>(self.obj());
-  if (dimc != arr->dim) {
-    vm.error("Indexing array of wrong dimensions");
-    return PeaNaN::of_null();
-  }
-  std::size_t step = 1;
-  std::size_t ind = 0;
-  for (std::size_t i = 0; i < dimc; ++i) {
-    auto n = vm.stack[vm.stack.size() - i - 1].coerce_num();
-    if (!n) {
-      vm.error("Trying to index array with non-number");
-      return PeaNaN::of_null();
-    }
-    if (*n < 0 || *n > arr->dims[dimc - 1 - i]) {
-      vm.error("Indexing out of bounds");
-      return PeaNaN::of_null();
-    }
-    ind += step * (*n - 1);
-    step *= arr->dims[dimc - 1 - i];
-  }
-  return arr->elems[ind];
-}
-
-std::string to_string(PeaNaN val);
-
-void array_to_string_helper(const PeaObjArray *arr,
-  std::size_t current_dim,
-  std::size_t &flat_index,
-  std::string &out) {
-  // Base case: We reached the leaf level, print the elements of the last
-  // dimension
-  if (current_dim == arr->dim - 1) {
-    out += "[";
-    for (std::size_t i = 0; i < arr->dims[current_dim]; ++i) {
-      // Convert the individual PeaNaN element to string (calling your main
-      // function)
-      out += to_string(arr->elems[flat_index++]);
-      if (i < arr->dims[current_dim] - 1) {
-        out += ", ";
-      }
-    }
-    out += "]";
-    return;
-  }
-
-  // Step case: Recursively wrap inner dimensions
-  out += "[";
-  for (std::size_t i = 0; i < arr->dims[current_dim]; ++i) {
-    array_to_string_helper(arr, current_dim + 1, flat_index, out);
-    if (i < arr->dims[current_dim] - 1) {
-      out += ", ";
-    }
-  }
-  out += "]";
-}
-
-std::string to_string(PeaNaN val) {
-  if (val.is_num()) {
-    return std::format("{:g}", val.num());
-  } else if (val.is_chr()) {
-    return std::string(1, val.chr());
-  } else if (val.is_null()) {
-    return "null";
-  } else if (val.is_fn()) {
-    return "<function>";
-  } else if (val.is_obj()) {
-    switch (static_cast<InternalObj>(val.obj()->kind)) {
-    case InternalObj::String:
-      return std::string(reinterpret_cast<char *>(
-        reinterpret_cast<PeaObjString *>(val.obj())->str));
-      break;
-    case InternalObj::Array: {
-      auto arr = reinterpret_cast<PeaObjArray *>(val.obj());
-      // Edge case: Empty array or 0 dimensions
-      if (arr->dim == 0 || arr->len == 0) {
-        return "[]";
-      }
-
-      std::string result;
-      std::size_t flat_index = 0;
-      array_to_string_helper(arr, 0, flat_index, result);
-      return result;
-    } break;
-    default:
-      assert(false && "General object");
-      break;
-    }
-  }
-  return "";
-}
-
-PeaNaN BuiltinFns::println(Vm &vm, std::uint16_t argc) {
-  for (std::uint16_t i = 0; i < argc; ++i) {
-    auto val = vm.stack[vm.stack.size() - i - 1];
-    if (val.is_ref()) {
-      std::println("{}", to_string(*val.ref()));
-    } else {
-      std::println("{}", to_string(val));
-    }
-  }
-  return PeaNaN::of_null();
 }

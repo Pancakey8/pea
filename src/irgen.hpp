@@ -87,6 +87,9 @@ enum PeaBuiltinIdentifier {
   PEA_ID_LENGTH = (1 << 16) - 1,
   PEA_ID_AT = (1 << 16) - 2,
   PEA_ID_PRINTLN = (1 << 16) - 3,
+  PEA_ID_TONUM = (1 << 16) - 4,
+  PEA_ID_TOSTRING = (1 << 16) - 5,
+  PEA_ID_ISTRUTHY = (1 << 16) - 6
 };
 
 class IrGen {
@@ -101,9 +104,12 @@ private:
   std::vector<Instruction> prog;
 
   std::unordered_map<std::string, std::uint16_t> variables{
-    {"length", PEA_ID_LENGTH},
-    {"at", PEA_ID_AT},
-    {"println", PEA_ID_PRINTLN},
+    { "length", PEA_ID_LENGTH },
+    { "at", PEA_ID_AT },
+    { "println", PEA_ID_PRINTLN },
+    { "tonum", PEA_ID_TONUM },
+    { "tostring", PEA_ID_TOSTRING },
+    { "istruthy", PEA_ID_ISTRUTHY },
   };
   std::uint16_t var_next{};
   std::uint16_t var_register(std::string const &name);
@@ -119,7 +125,7 @@ private:
   std::uint16_t label_get();
 
   std::unordered_map<std::string, std::uint16_t> types{
-    { "number", 0 }, { "char", 1 }, { "string", 2}, {"array", 3}
+    { "number", 0 }, { "char", 1 }, { "string", 2 }, { "array", 3 }
   };
   std::optional<std::uint16_t> resolve_type(std::string const &name);
 

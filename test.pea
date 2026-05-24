@@ -1,14 +1,13 @@
-dim x = "Hello"
-println(x.length)
-println(x)
+sub foo()
+  let x = 10
+end sub
 
-dim foo(2, 2)
-let foo(1, 1) = "Hi"
-let foo(2, 1) = 67
+sub bar()
+  dim y = 5
+end sub
 
-println(foo.length)
-println(foo)
+foo()
+bar()
 
-println(foo.at(1, 1))
-println(foo(1, 1))
+println(x, y)
 
