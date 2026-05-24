@@ -89,7 +89,8 @@ enum PeaBuiltinIdentifier {
   PEA_ID_PRINTLN = (1 << 16) - 3,
   PEA_ID_TONUM = (1 << 16) - 4,
   PEA_ID_TOSTRING = (1 << 16) - 5,
-  PEA_ID_ISTRUTHY = (1 << 16) - 6
+  PEA_ID_ISTRUTHY = (1 << 16) - 6,
+  PEA_ID_EQUALS = (1 << 16) - 7
 };
 
 class IrGen {
@@ -110,6 +111,7 @@ private:
     { "tonum", PEA_ID_TONUM },
     { "tostring", PEA_ID_TOSTRING },
     { "istruthy", PEA_ID_ISTRUTHY },
+    { "equals", PEA_ID_EQUALS },
   };
   std::uint16_t var_next{};
   std::uint16_t var_register(std::string const &name);

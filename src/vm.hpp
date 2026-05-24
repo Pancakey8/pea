@@ -45,7 +45,10 @@ struct PeaNaN {
   std::optional<std::size_t> get_method(Vm &vm, std::uint16_t id);
 
   std::optional<double> coerce_num(Vm &vm);
+  std::optional<std::string> coerce_str(Vm &vm);
   bool is_truthy(Vm &vm);
+
+  bool equals(Vm &vm, PeaNaN other);
 };
 
 enum class InternalObj : std::uint16_t {
@@ -111,6 +114,12 @@ struct BuiltinFns {
     CHAR_ISTRUTHY = (1ULL << 48) - 16,
     STRING_ISTRUTHY = (1ULL << 48) - 17,
     FUNCTION_ISTRUTHY = (1ULL << 48) - 18,
+    ARRAY_EQUALS = (1ULL << 48) - 19,
+    NUM_EQUALS = (1ULL << 48) - 20,
+    NULL_EQUALS = (1ULL << 48) - 21,
+    CHAR_EQUALS = (1ULL << 48) - 22,
+    STRING_EQUALS = (1ULL << 48) - 23,
+    FUNCTION_EQUALS = (1ULL << 48) - 24,
   };
 
   static PeaNaN array_at(Vm &vm, std::uint16_t argc);
@@ -131,6 +140,12 @@ struct BuiltinFns {
   static PeaNaN char_istruthy(Vm &vm, std::uint16_t argc);
   static PeaNaN string_istruthy(Vm &vm, std::uint16_t argc);
   static PeaNaN function_istruthy(Vm &vm, std::uint16_t argc);
+  static PeaNaN array_equals(Vm &vm, std::uint16_t argc);
+  static PeaNaN num_equals(Vm &vm, std::uint16_t argc);
+  static PeaNaN null_equals(Vm &vm, std::uint16_t argc);
+  static PeaNaN char_equals(Vm &vm, std::uint16_t argc);
+  static PeaNaN string_equals(Vm &vm, std::uint16_t argc);
+  static PeaNaN function_equals(Vm &vm, std::uint16_t argc);
 };
 
 class Vm {
@@ -173,6 +188,12 @@ private:
     BuiltinFns::char_istruthy,
     BuiltinFns::string_istruthy,
     BuiltinFns::function_istruthy,
+    BuiltinFns::array_equals,
+    BuiltinFns::num_equals,
+    BuiltinFns::null_equals,
+    BuiltinFns::char_equals,
+    BuiltinFns::string_equals,
+    BuiltinFns::function_equals,
   };
 
   void var_set(std::size_t id, PeaNaN val);

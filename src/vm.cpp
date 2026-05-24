@@ -167,6 +167,29 @@ std::optional<double> PeaNaN::coerce_num(Vm &vm) {
   }
 }
 
+std::optional<std::string> PeaNaN::coerce_str(Vm &vm) {
+  PeaObjString *str;
+  if (is_obj() &&
+      obj()->kind == static_cast<std::uint16_t>(InternalObj::String)) {
+    str = reinterpret_cast<PeaObjString *>(obj());
+  } else {
+    auto meth = get_method(vm, PEA_ID_TOSTRING);
+    if (!meth)
+      return {};
+    vm.stack.push_back(*this);
+    vm.dispatch_call(PeaNaN::of_func(*meth), 1);
+    auto val = vm.stack.back();
+    vm.stack.pop_back();
+    if (!val.is_obj() ||
+        val.obj()->kind != static_cast<std::uint16_t>(InternalObj::String))
+      return {};
+    str = reinterpret_cast<PeaObjString *>(val.obj());
+  }
+
+  std::string s{ str->str, str->len };
+  return s;
+}
+
 bool PeaNaN::is_truthy(Vm &vm) {
   if (auto meth = get_method(vm, PEA_ID_ISTRUTHY)) {
     vm.stack.push_back(*this);
@@ -176,6 +199,34 @@ bool PeaNaN::is_truthy(Vm &vm) {
     if (!val.is_num())
       return false;
     return val.num() != 0;
+  } else {
+    return false;
+  }
+}
+
+bool PeaNaN::equals(Vm &vm, PeaNaN other) {
+  if (this->is_num() != other.is_num())
+    return false;
+  if (this->is_chr() != other.is_chr())
+    return false;
+  if (this->is_fn() != other.is_fn())
+    return false;
+  if (this->is_null() != other.is_null())
+    return false;
+  if (this->is_obj() != other.is_obj())
+    return false;
+
+  if (this->is_obj() && other.is_obj() &&
+      this->obj()->kind != other.obj()->kind)
+    return false;
+
+  if (auto meth = get_method(vm, PEA_ID_EQUALS)) {
+    vm.stack.push_back(*this);
+    vm.stack.push_back(other);
+    vm.dispatch_call(PeaNaN::of_func(*meth), 2);
+    auto val = vm.stack.back();
+    vm.stack.pop_back();
+    return val.is_truthy(vm);
   } else {
     return false;
   }
@@ -204,35 +255,41 @@ PeaObjArray *PeaObjArray::make(
 
 Vm::Vm(std::vector<std::uint8_t> bytes)
     : bytes(std::move(bytes)), variables{ 1ULL << 16, PeaNaN::of_null() } {
-  vtables[static_cast<std::uint16_t>(InternalObj::String)] = {
-    { { PEA_ID_TOSTRING, BuiltinFns::STRING_TOSTRING },
-      { PEA_ID_TONUM, BuiltinFns::STRING_TONUM },
-      { PEA_ID_ISTRUTHY, BuiltinFns::STRING_ISTRUTHY } }
-  };
-  vtables[static_cast<std::uint16_t>(InternalObj::Array)] = {
-    { { PEA_ID_AT, BuiltinFns::ARRAY_AT },
-      { PEA_ID_TOSTRING, BuiltinFns::ARRAY_TOSTRING },
-      { PEA_ID_ISTRUTHY, BuiltinFns::ARRAY_ISTRUTHY } }
-  };
-  vtables[static_cast<std::uint16_t>(InternalObj::Char)] = {
-    { { PEA_ID_TOSTRING, BuiltinFns::CHAR_TOSTRING },
-      { PEA_ID_TONUM, BuiltinFns::CHAR_TONUM },
-      { PEA_ID_ISTRUTHY, BuiltinFns::CHAR_ISTRUTHY } }
-  };
-  vtables[static_cast<std::uint16_t>(InternalObj::Number)] = {
-    { { PEA_ID_TOSTRING, BuiltinFns::NUM_TOSTRING },
-      { PEA_ID_TONUM, BuiltinFns::NUM_TONUM },
-      { PEA_ID_ISTRUTHY, BuiltinFns::NUM_ISTRUTHY } }
-  };
-  vtables[static_cast<std::uint16_t>(InternalObj::Function)] = {
-    { { PEA_ID_TOSTRING, BuiltinFns::FUNCTION_TOSTRING },
-      { PEA_ID_ISTRUTHY, BuiltinFns::FUNCTION_ISTRUTHY } }
-  };
-  vtables[static_cast<std::uint16_t>(InternalObj::Null)] = {
-    { { PEA_ID_TOSTRING, BuiltinFns::NULL_TOSTRING },
-      { PEA_ID_TONUM, BuiltinFns::NULL_TONUM },
-      { PEA_ID_ISTRUTHY, BuiltinFns::NULL_ISTRUTHY } }
-  };
+  vtables[static_cast<std::uint16_t>(InternalObj::String)] = { {
+    { PEA_ID_TOSTRING, BuiltinFns::STRING_TOSTRING },
+    { PEA_ID_TONUM, BuiltinFns::STRING_TONUM },
+    { PEA_ID_ISTRUTHY, BuiltinFns::STRING_ISTRUTHY },
+    { PEA_ID_EQUALS, BuiltinFns::STRING_EQUALS },
+  } };
+  vtables[static_cast<std::uint16_t>(InternalObj::Array)] = { {
+    { PEA_ID_AT, BuiltinFns::ARRAY_AT },
+    { PEA_ID_TOSTRING, BuiltinFns::ARRAY_TOSTRING },
+    { PEA_ID_ISTRUTHY, BuiltinFns::ARRAY_ISTRUTHY },
+    { PEA_ID_EQUALS, BuiltinFns::ARRAY_EQUALS },
+  } };
+  vtables[static_cast<std::uint16_t>(InternalObj::Char)] = { {
+    { PEA_ID_TOSTRING, BuiltinFns::CHAR_TOSTRING },
+    { PEA_ID_TONUM, BuiltinFns::CHAR_TONUM },
+    { PEA_ID_ISTRUTHY, BuiltinFns::CHAR_ISTRUTHY },
+    { PEA_ID_EQUALS, BuiltinFns::CHAR_EQUALS },
+  } };
+  vtables[static_cast<std::uint16_t>(InternalObj::Number)] = { {
+    { PEA_ID_TOSTRING, BuiltinFns::NUM_TOSTRING },
+    { PEA_ID_TONUM, BuiltinFns::NUM_TONUM },
+    { PEA_ID_ISTRUTHY, BuiltinFns::NUM_ISTRUTHY },
+    { PEA_ID_EQUALS, BuiltinFns::NUM_EQUALS },
+  } };
+  vtables[static_cast<std::uint16_t>(InternalObj::Function)] = { {
+    { PEA_ID_TOSTRING, BuiltinFns::FUNCTION_TOSTRING },
+    { PEA_ID_ISTRUTHY, BuiltinFns::FUNCTION_ISTRUTHY },
+    { PEA_ID_EQUALS, BuiltinFns::FUNCTION_EQUALS },
+  } };
+  vtables[static_cast<std::uint16_t>(InternalObj::Null)] = { {
+    { PEA_ID_TOSTRING, BuiltinFns::NULL_TOSTRING },
+    { PEA_ID_TONUM, BuiltinFns::NULL_TONUM },
+    { PEA_ID_ISTRUTHY, BuiltinFns::NULL_ISTRUTHY },
+    { PEA_ID_EQUALS, BuiltinFns::NULL_EQUALS },
+  } };
   variables[PEA_ID_PRINTLN] = PeaNaN::of_func(BuiltinFns::PRINTLN);
   move_start();
 }
@@ -342,14 +399,14 @@ void Vm::run() {
       stack.pop_back();
       auto left = stack.back();
       stack.pop_back();
-      stack.push_back(PeaNaN::of_double(0));
+      stack.push_back(PeaNaN::of_double(left.equals(*this, right)));
     } break;
     case OpCode::Neq: {
       auto right = stack.back();
       stack.pop_back();
       auto left = stack.back();
       stack.pop_back();
-      stack.push_back(PeaNaN::of_double(0));
+      stack.push_back(PeaNaN::of_double(!left.equals(*this, right)));
     } break;
     case OpCode::Lt: {
       auto right = stack.back();
@@ -400,7 +457,13 @@ void Vm::run() {
       stack.pop_back();
       auto left = stack.back();
       stack.pop_back();
-      stack.push_back(PeaNaN::of_null());
+      auto rstr = right.coerce_str(*this);
+      auto lstr = left.coerce_str(*this);
+      if (!lstr || !rstr)
+        return error("'&' requires string, string");
+      auto cat = *lstr + *rstr;
+      auto obj = PeaObjString::make(cat.size(), cat.c_str());
+      stack.push_back(PeaNaN::of_obj(reinterpret_cast<PeaObject *>(obj)));
     } break;
     case OpCode::Pos: {
       auto op = stack.back();
@@ -440,9 +503,9 @@ void Vm::run() {
     case OpCode::Dispatch: {
       auto meth = read<std::uint16_t>();
       auto argc = read<std::uint16_t>();
-      auto self = stack.back();
+      auto self = stack[stack.size() - argc];
       if (auto meth_off = self.get_method(*this, meth)) {
-        dispatch_call(PeaNaN::of_func(*meth_off), argc + 1);
+        dispatch_call(PeaNaN::of_func(*meth_off), argc);
       } else {
         return error("Dispatching non-existent method");
       }
@@ -572,15 +635,14 @@ void Vm::run() {
     } break;
     case OpCode::Call: {
       auto argc = read<std::uint16_t>();
-      auto callee = stack.back();
+      auto callee = stack[stack.size() - argc - 1];
       if (callee.is_obj()) {
         auto meth_at = callee.get_method(*this, PEA_ID_AT);
         if (!meth_at)
           return error("Indexing non-indexable object");
         dispatch_call(PeaNaN::of_func(*meth_at), argc + 1);
       } else {
-        stack.pop_back();
-        dispatch_call(callee, argc);
+        dispatch_call(callee, argc + 1);
       }
     } break;
     case OpCode::Return: {

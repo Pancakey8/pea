@@ -2,12 +2,12 @@
 #include "vm.hpp"
 
 #include <cassert>
+#include <cstring>
 #include <print>
 #include <system_error>
 
 PeaNaN BuiltinFns::array_at(Vm &vm, std::uint16_t argc) {
-  auto self = vm.stack.back();
-  vm.stack.pop_back();
+  auto self = vm.stack[vm.stack.size() - argc];
   auto dimc = argc - 1;
   auto arr = reinterpret_cast<PeaObjArray *>(self.obj());
   if (dimc != arr->dim) {
@@ -101,14 +101,15 @@ std::string to_string(PeaNaN val) {
 }
 
 PeaNaN BuiltinFns::println(Vm &vm, std::uint16_t argc) {
-  for (std::uint16_t i = 0; i < argc; ++i) {
+  for (std::uint16_t i = 1; i < argc; ++i) {
     auto val = vm.stack[vm.stack.size() - argc + i];
     if (val.is_ref()) {
-      std::println("{}", to_string(*val.ref()));
+      std::print("{}", to_string(*val.ref()));
     } else {
-      std::println("{}", to_string(val));
+      std::print("{}", to_string(val));
     }
   }
+  std::println("");
   return PeaNaN::of_null();
 }
 
@@ -200,4 +201,55 @@ PeaNaN BuiltinFns::string_istruthy(Vm &vm, std::uint16_t argc) {
 
 PeaNaN BuiltinFns::function_istruthy(Vm &vm, std::uint16_t argc) {
   return PeaNaN::of_double(1);
+}
+
+PeaNaN BuiltinFns::array_equals(Vm &vm, std::uint16_t argc) {
+  auto self =
+    reinterpret_cast<PeaObjArray *>(vm.stack[vm.stack.size() - argc].obj());
+  auto other =
+    reinterpret_cast<PeaObjArray *>(vm.stack[vm.stack.size() - argc + 1].obj());
+
+  if (self->dim != other->dim)
+    return PeaNaN::of_double(0);
+
+  for (std::size_t i = 0; i < self->dim; ++i)
+    if (self->dims[i] != other->dims[i])
+      return PeaNaN::of_double(0);
+
+  for (std::size_t i = 0; i < self->len; ++i)
+    if (!self->elems[i].equals(vm, other->elems[i]))
+      return PeaNaN::of_double(0);
+
+  return PeaNaN::of_double(1);
+}
+
+PeaNaN BuiltinFns::num_equals(Vm &vm, std::uint16_t argc) {
+  auto self = vm.stack[vm.stack.size() - argc].num();
+  auto other = vm.stack[vm.stack.size() - argc + 1].num();
+  return PeaNaN::of_double(self == other);
+}
+
+PeaNaN BuiltinFns::null_equals(Vm &vm, std::uint16_t argc) {
+  return PeaNaN::of_double(1);
+}
+
+PeaNaN BuiltinFns::char_equals(Vm &vm, std::uint16_t argc) {
+  auto self = vm.stack[vm.stack.size() - argc].chr();
+  auto other = vm.stack[vm.stack.size() - argc + 1].chr();
+  return PeaNaN::of_double(self == other);
+}
+
+PeaNaN BuiltinFns::string_equals(Vm &vm, std::uint16_t argc) {
+  auto self =
+    reinterpret_cast<PeaObjString *>(vm.stack[vm.stack.size() - argc].obj());
+  auto other = reinterpret_cast<PeaObjString *>(
+    vm.stack[vm.stack.size() - argc + 1].obj());
+
+  return PeaNaN::of_double(std::strcmp(self->str, other->str) == 0);
+}
+
+PeaNaN BuiltinFns::function_equals(Vm &vm, std::uint16_t argc) {
+  auto self = vm.stack[vm.stack.size() - argc].fn();
+  auto other = vm.stack[vm.stack.size() - argc + 1].fn();
+  return PeaNaN::of_double(self == other);
 }

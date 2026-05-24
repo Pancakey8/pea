@@ -4,7 +4,7 @@
 #include "operations.cpp"
 #include "branches.cpp"
 
-Vm vm_run(std::string const &input) {
+std::unique_ptr<Vm> vm_run(std::string const &input) {
   Lexer lexer{ input };
   Parser parser{ lexer };
   auto program = parser.parse();
@@ -29,8 +29,8 @@ Vm vm_run(std::string const &input) {
   std::vector<std::uint8_t> bytecode{};
   BytecodeEmitter emitter{ *ir };
   emitter.emit(bytecode);
-  Vm vm{ bytecode };
-  vm.run();
+  auto vm = std::make_unique<Vm>(bytecode);
+  vm->run();
   return vm;
 }
 

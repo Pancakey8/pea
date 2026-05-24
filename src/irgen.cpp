@@ -269,6 +269,8 @@ std::expected<void, Error> IrGen::emit(Stmt const &stmt) {
         prog.push_back({ Instruction::StoreVar, var });
       }
 
+      prog.push_back({ Instruction::Pop });
+
       for (auto const &stmt : s.body) {
         if (auto res = emit(*stmt); !res) {
           prog = std::move(main_prog);
@@ -327,6 +329,8 @@ std::expected<void, Error> IrGen::emit(Expr const &expr) {
     [&](BinaryOp const &e) -> std::expected<void, Error> {
       if (e.op == TokenType::Dot) {
         if (auto call = std::get_if<Call>(&e.right->data)) {
+	  if (auto res = emit(*e.left); !res)
+            return std::unexpected(res.error());
 	  for (auto const &arg : call->args) {
             if (auto const var = std::get_if<Variable>(&arg->data)) {
               std::uint16_t id = var_register(var->name);
@@ -336,11 +340,9 @@ std::expected<void, Error> IrGen::emit(Expr const &expr) {
 		return std::unexpected(res.error());
             }
 	  }
-	  if (auto res = emit(*e.left); !res)
-            return std::unexpected(res.error());
 	  std::uint16_t meth = var_register(std::get<Variable>(call->callee->data).name);
 	  prog.push_back({ Instruction::Dispatch, meth });
-	  prog.push_back({ Instruction::Extension, static_cast<std::uint16_t>(call->args.size()) });
+	  prog.push_back({ Instruction::Extension, static_cast<std::uint16_t>(call->args.size() + 1) });
         } else {
 	  if (auto res = emit(*e.left); !res)
             return std::unexpected(res.error());
@@ -433,6 +435,8 @@ std::expected<void, Error> IrGen::emit(Expr const &expr) {
       return {};
     },
     [&](Call const &e) -> std::expected<void, Error> {
+      if (auto res = emit(*e.callee); !res)
+        return std::unexpected(res.error());
       for (auto const &arg : e.args) {
         if (auto const var = std::get_if<Variable>(&arg->data)) {
           std::uint16_t id = var_register(var->name);
@@ -442,8 +446,6 @@ std::expected<void, Error> IrGen::emit(Expr const &expr) {
             return std::unexpected(res.error());
         }
       }
-      if (auto res = emit(*e.callee); !res)
-        return std::unexpected(res.error());
       prog.push_back(
         { Instruction::Call, static_cast<uint16_t>(e.args.size()) });
       return {};

@@ -8,7 +8,7 @@
 #include "vm.hpp"
 #undef private
 
-Vm vm_run(std::string const &input);
+std::unique_ptr<Vm> vm_run(std::string const &input);
 
 extern std::size_t pass, total;
 

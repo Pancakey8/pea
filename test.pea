@@ -1,13 +1,20 @@
-sub foo()
-  let x = 10
-end sub
+Sub Fibo(n)
+  if n < 2 then
+    return n
+  else
+    return Fibo(n - 1) + Fibo(n - 2)
+  end if
+End Sub
 
-sub bar()
-  dim y = 5
-end sub
+println(Fibo(10))
 
-foo()
-bar()
+Dim x(10)
 
-println(x, y)
+for i = 1 to 10
+  let x(i) = 2 * i
+end for
+
+printLn("X(5)=", x.at(5))
+printLn("X(5)=" & x(5))
+printLn(x)
 
