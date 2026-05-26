@@ -22,9 +22,9 @@ private:
   Token peek();
   bool consume(TokenType type);
 
-  std::expected<ExprPtr, Error> parse_expression(int precedence = 0);
-  std::expected<ExprPtr, Error> parse_prefix();
-  std::expected<ExprPtr, Error> parse_infix(ExprPtr left);
+  std::expected<ExprPtr, Error> parse_expression(int precedence = 0, bool in_let = false);
+  std::expected<ExprPtr, Error> parse_prefix(bool in_let = false);
+  std::expected<ExprPtr, Error> parse_infix(ExprPtr left, bool in_let = false);
 
   std::expected<StmtPtr, Error> parse_statement();
   std::expected<std::vector<StmtPtr>, Error>

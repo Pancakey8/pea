@@ -45,8 +45,7 @@ struct DimStmt {
   std::optional<ExprPtr> init;
 };
 struct LetStmt {
-  std::string name;
-  std::vector<ExprPtr> dims;
+  ExprPtr lhs;
   ExprPtr value;
 };
 

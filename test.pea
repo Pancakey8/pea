@@ -1,20 +1,7 @@
-class Customer
-  public dim accountNumber
-  private dim age = 0
+dim x = 0
+dim i = 2
 
-  static sub make(no)
-    dim c = new Customer
-    c.accountNumber = no
-    c.age = no mod 20
-  end sub
-
-  sub getInfo()
-    return age
-  end sub
-end class
-
-dim pancake = Customer.make(12345678)
-println(pancake.getInfo())
-
-new Customer.getInfo()
+for i = 0 to 10 step i
+  let x = x + i
+end for
 

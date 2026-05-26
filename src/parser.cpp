@@ -71,7 +71,7 @@ int Parser::get_precedence(TokenType type) {
   }
 }
 
-std::expected<ExprPtr, Error> Parser::parse_prefix() {
+std::expected<ExprPtr, Error> Parser::parse_prefix(bool in_let) {
   if (current.type == TokenType::Number) {
     auto val = current.number;
     SourceRange range = { current.start, current.end };
@@ -111,7 +111,7 @@ std::expected<ExprPtr, Error> Parser::parse_prefix() {
     Token start_t = current;
     TokenType op = current.type;
     advance();
-    auto operand = parse_expression(2);
+    auto operand = parse_expression(2, in_let);
     if (!operand)
       return std::unexpected(operand.error());
     return std::make_unique<Expr>(UnaryOp{ op, std::move(*operand) },
@@ -121,7 +121,7 @@ std::expected<ExprPtr, Error> Parser::parse_prefix() {
     Token start_t = current;
     TokenType op = current.type;
     advance();
-    auto operand = parse_expression(100);
+    auto operand = parse_expression(100, in_let);
     if (!operand)
       return std::unexpected(operand.error());
     return std::make_unique<Expr>(UnaryOp{ op, std::move(*operand) },
@@ -131,7 +131,7 @@ std::expected<ExprPtr, Error> Parser::parse_prefix() {
     Token start_t = current;
     TokenType op = current.type;
     advance();
-    auto operand = parse_expression(35);
+    auto operand = parse_expression(35, in_let);
     if (!operand)
       return std::unexpected(operand.error());
     return std::make_unique<Expr>(UnaryOp{ op, std::move(*operand) },
@@ -141,7 +141,7 @@ std::expected<ExprPtr, Error> Parser::parse_prefix() {
     Error{ "Unexpected token in expression", current.start, current.end });
 }
 
-std::expected<ExprPtr, Error> Parser::parse_infix(ExprPtr left) {
+std::expected<ExprPtr, Error> Parser::parse_infix(ExprPtr left, bool in_let) {
   if (current.type == TokenType::LParen) {
     Token start_t = current;
     advance();
@@ -172,7 +172,7 @@ std::expected<ExprPtr, Error> Parser::parse_infix(ExprPtr left) {
 
   // Right associativity for Caret (^)
   int next_prec = (op == TokenType::Caret) ? prec - 1 : prec + 1;
-  auto right = parse_expression(next_prec);
+  auto right = parse_expression(next_prec, in_let);
   if (!right)
     return right;
 
@@ -195,13 +195,14 @@ std::expected<ExprPtr, Error> Parser::parse_infix(ExprPtr left) {
     SourceRange{ left->range.start, (*right)->range.end });
 }
 
-std::expected<ExprPtr, Error> Parser::parse_expression(int precedence) {
-  auto left = parse_prefix();
+std::expected<ExprPtr, Error> Parser::parse_expression(int precedence, bool in_let) {
+  auto left = parse_prefix(in_let);
   if (!left)
     return left;
 
   while (get_precedence(current.type) > precedence) {
-    left = parse_infix(std::move(*left));
+    if (in_let && current.type == TokenType::Eq) break;
+    left = parse_infix(std::move(*left), in_let);
     if (!left)
       return left;
   }
@@ -326,29 +327,8 @@ std::expected<StmtPtr, Error> Parser::parse_dim() {
 std::expected<StmtPtr, Error> Parser::parse_let() {
   Token start_t = current;
   advance(); // let
-  std::string name = current.text;
-  if (!consume(TokenType::Ident))
-    return std::unexpected(
-      Error{ "Expected identifier", current.start, current.end });
-  std::vector<ExprPtr> dims{};
-  if (consume(TokenType::LParen)) {
-    if (current.type != TokenType::RParen) {
-      do {
-        auto arg = parse_expression();
-        if (!arg)
-          return std::unexpected(arg.error());
-        dims.push_back(std::move(*arg));
-        if (current.type == TokenType::Comma)
-          advance();
-        else
-          break;
-      } while (true);
-    }
-
-    if (!consume(TokenType::RParen))
-      return std::unexpected(
-        Error{ "Expected ')' after dimensions", current.start, current.end });
-  }
+  auto lhs = parse_expression(0, true);
+  if (!lhs) return std::unexpected(lhs.error());
   if (!consume(TokenType::Eq))
     return std::unexpected(Error{ "Expected '='", current.start, current.end });
   auto val = parse_expression();
@@ -362,7 +342,7 @@ std::expected<StmtPtr, Error> Parser::parse_let() {
     advance();
   }
   return std::make_unique<Stmt>(
-    LetStmt{ name, std::move(dims), std::move(*val) },
+    LetStmt{ std::move(*lhs), std::move(*val) },
     SourceRange{ start_t.start, last_t.end });
 }
 

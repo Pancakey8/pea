@@ -27,6 +27,7 @@ struct PeaNaN {
   static PeaNaN of_null();
   static PeaNaN of_ref(PeaNaN *ref);
   static PeaNaN of_obj(PeaObject *obj);
+  static PeaNaN of_class(std::uint16_t c);
 
   bool is_num() const;
   bool is_null() const;
@@ -34,15 +35,20 @@ struct PeaNaN {
   bool is_fn() const;
   bool is_ref() const;
   bool is_obj() const;
+  bool is_class() const;
 
   double num() const;
   char chr() const;
   std::size_t fn() const;
   PeaNaN *ref() const;
   PeaObject *obj() const;
+  std::uint16_t cls() const;
 
   PeaNaN get_member(Vm &vm, std::uint16_t id);
   std::optional<std::size_t> get_method(Vm &vm, std::uint16_t id);
+
+  void deref();
+  PeaNaN &canon();
 
   std::optional<double> coerce_num(Vm &vm);
   std::optional<std::string> coerce_str(Vm &vm);
@@ -57,7 +63,8 @@ enum class InternalObj : std::uint16_t {
   Char = (1 << 16) - 3,
   Number = (1 << 16) - 4,
   Function = (1 << 16) - 5,
-  Null = (1 << 16) - 6
+  Null = (1 << 16) - 6,
+  Class = (1 << 16) - 7,
 };
 
 struct PeaObjString {

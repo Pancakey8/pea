@@ -44,13 +44,14 @@ void BytecodeEmitter::emit(std::vector<std::uint8_t> &out) {
       static_cast<unsigned char>('A') });
   emit_consts(out);
   emit_subs(out);
+  emit_classes(out);
   emit_body(prog.prog, out);
   resolve_ids(out);
 }
 
 // <table_size:8><const_count:2><consts...:?>
 void BytecodeEmitter::emit_consts(std::vector<std::uint8_t> &out) {
-  enum ValTypes : std::uint8_t { Number, Char, String, FuncPtr };
+  enum ValTypes : std::uint8_t { Number, Char, String, FuncPtr, ClassPtr };
 
   auto head_start = out.size();
   out.resize(out.size() + sizeof(std::size_t) + sizeof(std::uint16_t));
@@ -60,31 +61,33 @@ void BytecodeEmitter::emit_consts(std::vector<std::uint8_t> &out) {
 
   for (auto const &[i, c] : prog.consts | std::ranges::views::enumerate) {
     consts[i] = out.size();
-    std::visit(Overloaded{
-                 [&](PeaNumber const &v) {
+    std::visit(
+      Overloaded{ [&](PeaNumber const &v) {
                    out.push_back(Number);
                    emit_le(out, out.end(), std::bit_cast<std::uint64_t>(v.val));
                  },
-                 [&](PeaChar const &v) {
-                   out.push_back(Char);
-                   emit_le(out, out.end(), static_cast<std::uint8_t>(v.val));
-                 },
-                 [&](PeaString const &v) {
-                   out.push_back(String);
-                   emit_le(
-                     out, out.end(), static_cast<std::uint64_t>(v.val.size()));
-                   out.insert(out.end(),
-                     reinterpret_cast<const unsigned char *>(v.val.data()),
-                     reinterpret_cast<const unsigned char *>(
-                       v.val.data() + v.val.size()));
-                 },
-                 [&](PeaFuncPtr const &v) {
-                   out.push_back(FuncPtr);
-                   resolve_subs.push_back(out.size());
-                   emit_le(out, out.end(), static_cast<std::uint16_t>(v.id));
-                   out.resize(out.size() + 6);
-                 },
-               },
+        [&](PeaChar const &v) {
+          out.push_back(Char);
+          emit_le(out, out.end(), static_cast<std::uint8_t>(v.val));
+        },
+        [&](PeaString const &v) {
+          out.push_back(String);
+          emit_le(out, out.end(), static_cast<std::uint64_t>(v.val.size()));
+          out.insert(out.end(),
+            reinterpret_cast<const unsigned char *>(v.val.data()),
+            reinterpret_cast<const unsigned char *>(
+              v.val.data() + v.val.size()));
+        },
+        [&](PeaFuncPtr const &v) {
+          out.push_back(FuncPtr);
+          resolve_subs.push_back(out.size());
+          emit_le(out, out.end(), static_cast<std::uint16_t>(v.id));
+          out.resize(out.size() + 6);
+        },
+        [&](PeaClassPtr const &v) {
+          out.push_back(ClassPtr);
+          emit_le(out, out.end(), static_cast<std::uint16_t>(v.id));
+        } },
       c.data);
   }
 
@@ -170,10 +173,6 @@ void BytecodeEmitter::emit_body(
       out.push_back(static_cast<std::uint8_t>(OpCode::LoadVar));
       emit_le(out, out.end(), static_cast<std::uint16_t>(instr.data));
       break;
-    case Instruction::LoadRef:
-      out.push_back(static_cast<std::uint8_t>(OpCode::LoadRef));
-      emit_le(out, out.end(), static_cast<std::uint16_t>(instr.data));
-      break;
     case Instruction::DefineVar: {
       out.push_back(static_cast<std::uint8_t>(OpCode::DefineVar));
       emit_le(out, out.end(), static_cast<std::uint16_t>(instr.data));
@@ -183,12 +182,6 @@ void BytecodeEmitter::emit_body(
     case Instruction::StoreVar: {
       auto op = out.size();
       out.push_back(static_cast<std::uint8_t>(OpCode::StoreVar));
-      emit_le(out, out.end(), static_cast<std::uint16_t>(instr.data));
-      if (it + 1 != instrs.end() && (it + 1)->kind == Instruction::Extension) {
-        auto dim_ext = *(++it);
-        emit_le(out, out.end(), static_cast<std::uint16_t>(dim_ext.data));
-        out[op] = static_cast<std::uint8_t>(OpCode::StoreVarI);
-      }
     } break;
     case Instruction::LoadConst:
       out.push_back(static_cast<std::uint8_t>(OpCode::LoadConst));
@@ -235,6 +228,15 @@ void BytecodeEmitter::emit_body(
       auto argc_ext = *(++it);
       emit_le(out, out.end(), static_cast<std::uint16_t>(argc_ext.data));
     } break;
+    case Instruction::Construct:
+      out.push_back(static_cast<std::uint8_t>(OpCode::Construct));
+      break;
+    case Instruction::StoreVField: {
+      out.push_back(static_cast<std::uint8_t>(OpCode::StoreVField));
+      emit_le(out, out.end(), static_cast<std::uint16_t>(instr.data));
+      auto field_ext = *(++it);
+      emit_le(out, out.end(), static_cast<std::uint16_t>(field_ext.data));
+    } break;
     case Instruction::Extension:
       assert(false && "Extensions are pulled earlier, can't reach");
     }
@@ -261,6 +263,34 @@ void BytecodeEmitter::emit_subs(std::vector<std::uint8_t> &out) {
   write_le(
     out, table_size, static_cast<std::uint64_t>(out.size() - head_start - 8));
   write_le(out, sub_count, static_cast<std::uint16_t>(prog.func_bodies.size()));
+}
+
+void BytecodeEmitter::emit_classes(std::vector<std::uint8_t> &out) {
+  auto head_start = out.size();
+  out.resize(out.size() + sizeof(std::size_t) + sizeof(std::uint16_t));
+  auto head_end = out.size();
+  auto table_size = head_start;
+  auto class_count = table_size + sizeof(std::size_t);
+
+  for (auto const table : prog.classes) {
+    emit_le(out, out.end(), static_cast<std::size_t>(table.fields.size()));
+    for (auto const field : table.fields) {
+      emit_le(out, out.end(), static_cast<std::uint8_t>(field.is_public));
+      emit_le(out, out.end(), static_cast<std::uint8_t>(field.is_static));
+      emit_le(out, out.end(), static_cast<std::uint16_t>(field.name));
+    }
+    emit_le(out, out.end(), static_cast<std::size_t>(table.methods.size()));
+    for (auto const meth : table.methods) {
+      emit_le(out, out.end(), static_cast<std::uint8_t>(meth.is_public));
+      emit_le(out, out.end(), static_cast<std::uint8_t>(meth.is_static));
+      emit_le(out, out.end(), static_cast<std::uint16_t>(meth.name));
+      emit_le(out, out.end(), static_cast<std::uint16_t>(meth.id));
+    }
+  }
+
+  write_le(
+    out, table_size, static_cast<std::uint64_t>(out.size() - head_start - 8));
+  write_le(out, class_count, static_cast<std::uint16_t>(prog.classes.size()));
 }
 
 void BytecodeEmitter::resolve_ids(std::vector<std::uint8_t> &bytes) {

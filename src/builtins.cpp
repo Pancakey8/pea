@@ -8,6 +8,7 @@
 
 PeaNaN BuiltinFns::array_at(Vm &vm, std::uint16_t argc) {
   auto self = vm.stack[vm.stack.size() - argc];
+  self.deref();
   auto dimc = argc - 1;
   auto arr = reinterpret_cast<PeaObjArray *>(self.obj());
   if (dimc != arr->dim) {
@@ -29,7 +30,7 @@ PeaNaN BuiltinFns::array_at(Vm &vm, std::uint16_t argc) {
     ind += step * (*n - 1);
     step *= arr->dims[dimc - 1 - i];
   }
-  return arr->elems[ind];
+  return PeaNaN::of_ref(&arr->elems[ind]);
 }
 
 std::string to_string(PeaNaN val);
@@ -103,11 +104,8 @@ std::string to_string(PeaNaN val) {
 PeaNaN BuiltinFns::println(Vm &vm, std::uint16_t argc) {
   for (std::uint16_t i = 1; i < argc; ++i) {
     auto val = vm.stack[vm.stack.size() - argc + i];
-    if (val.is_ref()) {
-      std::print("{}", to_string(*val.ref()));
-    } else {
-      std::print("{}", to_string(val));
-    }
+    val.deref();
+    std::print("{}", to_string(val));
   }
   std::println("");
   return PeaNaN::of_null();
@@ -115,6 +113,7 @@ PeaNaN BuiltinFns::println(Vm &vm, std::uint16_t argc) {
 
 PeaNaN BuiltinFns::array_tostring(Vm &vm, std::uint16_t argc) {
   auto o = vm.stack.back();
+  o.deref();
   auto str = to_string(o);
   auto s = PeaObjString::make(str.size(), str.c_str());
   return PeaNaN::of_obj(reinterpret_cast<PeaObject *>(s));
@@ -122,6 +121,7 @@ PeaNaN BuiltinFns::array_tostring(Vm &vm, std::uint16_t argc) {
 
 PeaNaN BuiltinFns::num_tostring(Vm &vm, std::uint16_t argc) {
   auto o = vm.stack.back();
+  o.deref();
   auto str = to_string(o);
   auto s = PeaObjString::make(str.size(), str.c_str());
   return PeaNaN::of_obj(reinterpret_cast<PeaObject *>(s));
@@ -129,6 +129,7 @@ PeaNaN BuiltinFns::num_tostring(Vm &vm, std::uint16_t argc) {
 
 PeaNaN BuiltinFns::null_tostring(Vm &vm, std::uint16_t argc) {
   auto o = vm.stack.back();
+  o.deref();
   auto str = to_string(o);
   auto s = PeaObjString::make(str.size(), str.c_str());
   return PeaNaN::of_obj(reinterpret_cast<PeaObject *>(s));
@@ -136,6 +137,7 @@ PeaNaN BuiltinFns::null_tostring(Vm &vm, std::uint16_t argc) {
 
 PeaNaN BuiltinFns::char_tostring(Vm &vm, std::uint16_t argc) {
   auto o = vm.stack.back();
+  o.deref();
   auto str = to_string(o);
   auto s = PeaObjString::make(str.size(), str.c_str());
   return PeaNaN::of_obj(reinterpret_cast<PeaObject *>(s));
@@ -143,6 +145,7 @@ PeaNaN BuiltinFns::char_tostring(Vm &vm, std::uint16_t argc) {
 
 PeaNaN BuiltinFns::string_tostring(Vm &vm, std::uint16_t argc) {
   auto o = vm.stack.back();
+  o.deref();
   auto str = to_string(o);
   auto s = PeaObjString::make(str.size(), str.c_str());
   return PeaNaN::of_obj(reinterpret_cast<PeaObject *>(s));
@@ -150,24 +153,29 @@ PeaNaN BuiltinFns::string_tostring(Vm &vm, std::uint16_t argc) {
 
 PeaNaN BuiltinFns::function_tostring(Vm &vm, std::uint16_t argc) {
   auto o = vm.stack.back();
+  o.deref();
   auto str = to_string(o);
   auto s = PeaObjString::make(str.size(), str.c_str());
   return PeaNaN::of_obj(reinterpret_cast<PeaObject *>(s));
 }
 
 PeaNaN BuiltinFns::num_tonum(Vm &vm, std::uint16_t argc) {
+  vm.stack.back().deref();
   return vm.stack.back();
 }
 
 PeaNaN BuiltinFns::char_tonum(Vm &vm, std::uint16_t argc) {
+  vm.stack.back().deref();
   return PeaNaN::of_double(static_cast<double>(vm.stack.back().chr()));
 }
 
 PeaNaN BuiltinFns::null_tonum(Vm &vm, std::uint16_t argc) {
+  vm.stack.back().deref();
   return PeaNaN::of_double(0);
 }
 
 PeaNaN BuiltinFns::string_tonum(Vm &vm, std::uint16_t argc) {
+  vm.stack.back().deref();
   auto str = reinterpret_cast<PeaObjString *>(vm.stack.back().obj());
   double res;
   auto [_, ec] = std::from_chars(str->str, str->str + str->len, res);
@@ -183,6 +191,7 @@ PeaNaN BuiltinFns::array_istruthy(Vm &vm, std::uint16_t argc) {
 }
 
 PeaNaN BuiltinFns::num_istruthy(Vm &vm, std::uint16_t argc) {
+  vm.stack.back().deref();
   return PeaNaN::of_double(vm.stack.back().num() != 0);
 }
 
@@ -191,10 +200,12 @@ PeaNaN BuiltinFns::null_istruthy(Vm &vm, std::uint16_t argc) {
 }
 
 PeaNaN BuiltinFns::char_istruthy(Vm &vm, std::uint16_t argc) {
+  vm.stack.back().deref();
   return PeaNaN::of_double(vm.stack.back().chr() != '\0');
 }
 
 PeaNaN BuiltinFns::string_istruthy(Vm &vm, std::uint16_t argc) {
+  vm.stack.back().deref();
   auto str = reinterpret_cast<PeaObjString *>(vm.stack.back().obj());
   return PeaNaN::of_double(str->len != 0);
 }
@@ -204,6 +215,8 @@ PeaNaN BuiltinFns::function_istruthy(Vm &vm, std::uint16_t argc) {
 }
 
 PeaNaN BuiltinFns::array_equals(Vm &vm, std::uint16_t argc) {
+  vm.stack[vm.stack.size() - argc].deref();
+  vm.stack[vm.stack.size() - argc + 1].deref();
   auto self =
     reinterpret_cast<PeaObjArray *>(vm.stack[vm.stack.size() - argc].obj());
   auto other =
@@ -224,6 +237,8 @@ PeaNaN BuiltinFns::array_equals(Vm &vm, std::uint16_t argc) {
 }
 
 PeaNaN BuiltinFns::num_equals(Vm &vm, std::uint16_t argc) {
+  vm.stack[vm.stack.size() - argc].deref();
+  vm.stack[vm.stack.size() - argc + 1].deref();
   auto self = vm.stack[vm.stack.size() - argc].num();
   auto other = vm.stack[vm.stack.size() - argc + 1].num();
   return PeaNaN::of_double(self == other);
@@ -234,12 +249,16 @@ PeaNaN BuiltinFns::null_equals(Vm &vm, std::uint16_t argc) {
 }
 
 PeaNaN BuiltinFns::char_equals(Vm &vm, std::uint16_t argc) {
+  vm.stack[vm.stack.size() - argc].deref();
+  vm.stack[vm.stack.size() - argc + 1].deref();
   auto self = vm.stack[vm.stack.size() - argc].chr();
   auto other = vm.stack[vm.stack.size() - argc + 1].chr();
   return PeaNaN::of_double(self == other);
 }
 
 PeaNaN BuiltinFns::string_equals(Vm &vm, std::uint16_t argc) {
+  vm.stack[vm.stack.size() - argc].deref();
+  vm.stack[vm.stack.size() - argc + 1].deref();
   auto self =
     reinterpret_cast<PeaObjString *>(vm.stack[vm.stack.size() - argc].obj());
   auto other = reinterpret_cast<PeaObjString *>(
@@ -249,6 +268,8 @@ PeaNaN BuiltinFns::string_equals(Vm &vm, std::uint16_t argc) {
 }
 
 PeaNaN BuiltinFns::function_equals(Vm &vm, std::uint16_t argc) {
+  vm.stack[vm.stack.size() - argc].deref();
+  vm.stack[vm.stack.size() - argc + 1].deref();
   auto self = vm.stack[vm.stack.size() - argc].fn();
   auto other = vm.stack[vm.stack.size() - argc + 1].fn();
   return PeaNaN::of_double(self == other);

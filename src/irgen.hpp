@@ -20,9 +20,12 @@ struct PeaString {
 struct PeaFuncPtr {
   std::uint16_t id;
 };
+struct PeaClassPtr {
+  std::uint16_t id;
+};
 
 struct PeaValue {
-  std::variant<PeaNumber, PeaChar, PeaString, PeaFuncPtr> data;
+  std::variant<PeaNumber, PeaChar, PeaString, PeaFuncPtr, PeaClassPtr> data;
 };
 
 struct Instruction {
@@ -47,12 +50,12 @@ struct Instruction {
     Neg,
     Not,
     LoadVar,
-    LoadRef,
     DefineVar,
     StoreVar,
     Deref,
     Member,
     Dispatch,
+    Construct,
     LoadConst,
     Pop,
     Label,
@@ -61,9 +64,28 @@ struct Instruction {
     JumpTrue,
     Call,
     Return,
+    StoreVField,
     Extension = 0xFF
   } kind;
   std::uint16_t data;
+};
+
+struct ClassTable {
+  struct Field {
+    std::uint16_t name;
+    bool is_public;
+    bool is_static;
+  };
+
+  struct Method {
+    std::uint16_t name;
+    std::uint16_t id;
+    bool is_public;
+    bool is_static;
+  };
+
+  std::vector<Field> fields;
+  std::vector<Method> methods;
 };
 
 struct ProgramIr {
@@ -73,6 +95,8 @@ struct ProgramIr {
   std::unordered_map<std::string, std::uint16_t> labels;
   std::vector<std::string> func_names;
   std::vector<std::vector<Instruction>> func_bodies;
+  std::vector<std::string> class_names;
+  std::vector<ClassTable> classes;
 };
 
 std::ostream &operator<<(std::ostream &os, ProgramIr const &ir);
@@ -89,7 +113,8 @@ enum PeaBuiltinIdentifier {
   PEA_ID_TONUM = (1 << 16) - 4,
   PEA_ID_TOSTRING = (1 << 16) - 5,
   PEA_ID_ISTRUTHY = (1 << 16) - 6,
-  PEA_ID_EQUALS = (1 << 16) - 7
+  PEA_ID_EQUALS = (1 << 16) - 7,
+  PEA_ID_THIS = (1 << 16) - 8,
 };
 
 class IrGen {
@@ -111,6 +136,7 @@ private:
     { "tostring", PEA_ID_TOSTRING },
     { "istruthy", PEA_ID_ISTRUTHY },
     { "equals", PEA_ID_EQUALS },
+    { "this", PEA_ID_THIS },
   };
   std::uint16_t var_next{};
   std::uint16_t var_register(std::string const &name);
@@ -130,4 +156,11 @@ private:
   std::vector<std::string> func_names{};
   std::vector<std::vector<Instruction>> func_bodies{};
   std::uint16_t func_next{};
+
+  std::vector<std::string> class_names{};
+  std::vector<ClassTable> classes{};
+  std::uint16_t class_next{};
+  std::uint16_t class_register(std::string lbl);
+
+  std::expected<void, Error> sub_emit(SubDecl const &s, std::uint16_t id);
 };

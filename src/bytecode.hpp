@@ -29,10 +29,8 @@ enum class OpCode : std::uint8_t {
   Member,
   Dispatch,
   LoadVar,
-  LoadRef,
   DefineVar,
   StoreVar,
-  StoreVarI,
   LoadConst,
   LoadNull,
   Pop,
@@ -41,6 +39,8 @@ enum class OpCode : std::uint8_t {
   JumpTrue,
   Call,
   Return,
+  Construct,
+  StoreVField,
   Extension = 0xFF
 };
 
@@ -53,6 +53,7 @@ public:
 private:
   void emit_consts(std::vector<std::uint8_t> &out);
   void emit_subs(std::vector<std::uint8_t> &out);
+  void emit_classes(std::vector<std::uint8_t> &out);
   void emit_body(
     std::vector<Instruction> const &instrs, std::vector<std::uint8_t> &out);
   void resolve_ids(std::vector<std::uint8_t> &bytes);
