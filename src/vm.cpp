@@ -519,14 +519,10 @@ void Vm::run() {
       auto var = read<std::uint16_t>();
       stack.push_back(var_ref(var));
     } break;
-    case OpCode::DefineVarT:
-      [[fallthrough]];
     case OpCode::DefineVar: {
       auto var = read<std::uint16_t>();
       auto dim = read<std::uint16_t>();
       var_def(var);
-      if (static_cast<OpCode>(op) == OpCode::DefineVarT)
-        ; // TODO
       if (dim > 0) {
         std::size_t total = 1;
         auto dims =

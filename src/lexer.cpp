@@ -153,12 +153,12 @@ std::expected<Token, Error> Lexer::read_ident_or_keyword() {
       {"to", TokenType::KW_To},       {"step", TokenType::KW_Step},
       {"while", TokenType::KW_While}, {"do", TokenType::KW_Do},
       {"loop", TokenType::KW_Loop},   {"goto", TokenType::KW_Goto},
-      {"end", TokenType::KW_End},     {"as", TokenType::KW_As},
+      {"end", TokenType::KW_End},     {"byval", TokenType::KW_ByVal},
       {"mod", TokenType::KW_Mod},     {"and", TokenType::KW_And},
       {"or", TokenType::KW_Or},       {"not", TokenType::KW_Not},
       {"sub", TokenType::KW_Sub},     {"return", TokenType::KW_Return},
       {"break", TokenType::KW_Break}, {"continue", TokenType::KW_Continue},
-      {"byref", TokenType::KW_ByRef}, {"byval", TokenType::KW_ByVal},};
+      {"byref", TokenType::KW_ByRef}, };
 
   if (auto it = keywords.find(lower); it != keywords.end()) {
     // Special handling for "end if", "end for", and "end sub"
@@ -263,7 +263,6 @@ std::string to_string(TokenType type) {
     case TokenType::KW_Loop: return "KW_Loop";
     case TokenType::KW_Goto: return "KW_Goto";
     case TokenType::KW_End: return "KW_End";
-    case TokenType::KW_As: return "KW_As";
     case TokenType::KW_Mod: return "KW_Mod";
     case TokenType::KW_And: return "KW_And";
     case TokenType::KW_Or: return "KW_Or";

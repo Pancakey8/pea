@@ -42,7 +42,6 @@ enum class TokenType {
   KW_Loop,
   KW_Goto,
   KW_End,
-  KW_As,
   KW_Mod,
   KW_And,
   KW_Or,

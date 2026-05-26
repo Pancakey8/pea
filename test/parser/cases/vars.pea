@@ -1,5 +1,6 @@
 dim x(2, 2)
-dim y as number
+dim y
 dim z = 20 
 let t = 20
 let w(3, 5) = 50
+

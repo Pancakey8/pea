@@ -42,7 +42,6 @@ using StmtPtr = std::unique_ptr<Stmt>;
 struct DimStmt {
   std::string name;
   std::vector<ExprPtr> dims;
-  std::optional<std::string> type;
   std::optional<ExprPtr> init;
 };
 struct LetStmt {
@@ -82,7 +81,6 @@ struct LabelStmt {
 
 struct Parameter {
   std::string name;
-  std::optional<std::string> type;
   bool is_ref;
 };
 struct SubDecl {

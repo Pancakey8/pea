@@ -122,12 +122,7 @@ struct StmtPrinter {
       if (i < s.dims.size() - 1)
         os << ",";
     }
-    os << "],\"type\":";
-    if (s.type)
-      os << "\"" << *s.type << "\"";
-    else
-      os << "null";
-    os << ",\"init\":";
+    os << "],\"init\":";
     if (s.init)
       os << *s.init.value();
     else
@@ -279,11 +274,6 @@ struct StmtPrinter {
     for (size_t i = 0; i < s.params.size(); ++i) {
       os << "{\"name\":";
       op_json_str(os, s.params[i].name);
-      os << ",\"type\":";
-      if (s.params[i].type)
-        op_json_str(os, *s.params[i].type);
-      else
-        os << "null";
       os << ",\"is_ref\":" << s.params[i].is_ref;
       os << "}";
       if (i < s.params.size() - 1)

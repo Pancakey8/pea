@@ -290,15 +290,6 @@ std::expected<StmtPtr, Error> Parser::parse_dim() {
         Error{ "Expected ')' after dimensions", current.start, current.end });
   }
 
-  std::optional<std::string> type{};
-  if (consume(TokenType::KW_As)) {
-    if (current.type != TokenType::Ident)
-      return std::unexpected(
-        Error{ "Expected type after 'as'", current.start, current.end });
-    type = current.text;
-    advance();
-  }
-
   std::optional<ExprPtr> init{};
   if (consume(TokenType::Eq)) {
     auto val = parse_expression();
@@ -315,7 +306,7 @@ std::expected<StmtPtr, Error> Parser::parse_dim() {
     advance();
   }
   return std::make_unique<Stmt>(
-    DimStmt{ name, std::move(dims), std::move(type), std::move(init) },
+    DimStmt{ name, std::move(dims), std::move(init) },
     SourceRange{ start_t.start, last_t.end });
 }
 
@@ -613,15 +604,7 @@ std::expected<StmtPtr, Error> Parser::parse_sub() {
         Error{ "Expected parameter name", current.start, current.end });
     std::string p_name = current.text;
     advance();
-    std::optional<std::string> p_type{};
-    if (consume(TokenType::KW_As)) {
-      if (current.type != TokenType::Ident)
-        return std::unexpected(
-          Error{ "Expected parameter type", current.start, current.end });
-      p_type = current.text;
-      advance();
-    }
-    params.push_back({ p_name, p_type, is_ref });
+    params.push_back({ p_name, is_ref });
     if (!consume(TokenType::Comma))
       break;
   }

@@ -71,7 +71,6 @@ struct ProgramIr {
   std::unordered_map<std::string, std::uint16_t> vars;
   std::vector<PeaValue> consts;
   std::unordered_map<std::string, std::uint16_t> labels;
-  std::unordered_map<std::string, std::uint16_t> types;
   std::vector<std::string> func_names;
   std::vector<std::vector<Instruction>> func_bodies;
 };
@@ -125,11 +124,6 @@ private:
   std::uint16_t label_next{};
   std::uint16_t label_register(std::string lbl);
   std::uint16_t label_get();
-
-  std::unordered_map<std::string, std::uint16_t> types{
-    { "number", 0 }, { "char", 1 }, { "string", 2 }, { "array", 3 }
-  };
-  std::optional<std::uint16_t> resolve_type(std::string const &name);
 
   std::vector<LoopLabels> loop_stack{};
 
