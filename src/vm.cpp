@@ -892,6 +892,9 @@ void Vm::dispatch_call(
       stack.push_back(val);
     } else {
       std::size_t top = stack.size() - argc;
+      for (std::size_t i = top; i < stack.size(); ++i)
+	if (stack[i].is_ref() && stack[i].ref_local())
+	  stack[i] = PeaNaN::of_ref(stack[i].ref(), false);
       call_stack.push_back({ ip, top, shadow_stack.size(), in_class });
       ip = callee.fn() + 8;
     }

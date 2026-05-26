@@ -2,6 +2,7 @@
 #include "irgen.hpp"
 #include <cstddef>
 #include <cstdint>
+#include <deque>
 #include <functional>
 #include <limits>
 #include <optional>
@@ -202,10 +203,10 @@ private:
   template <typename Int> Int read_at(std::size_t pos);
 
   std::vector<std::uint8_t> bytes{};
-  std::vector<PeaNaN> stack{};
+  std::deque<PeaNaN> stack{};
   std::vector<PeaNaN> variables{};
   std::vector<CallFrame> call_stack{};
-  std::vector<std::pair<std::size_t, PeaNaN>> shadow_stack{};
+  std::deque<std::pair<std::size_t, PeaNaN>> shadow_stack{};
   std::array<PeaVTable, (1ULL << 16)> vtables{};
   std::vector<std::function<PeaNaN(Vm &, std::uint16_t)>> internal_fns{
     BuiltinFns::array_at,

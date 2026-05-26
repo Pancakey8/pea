@@ -1,14 +1,23 @@
-class Foo
-  public dim x = 5
+sub foo(byref a)
+  if a < 0 then
+    return
+  end if
+  println("a = " & a)
+  let a = a - 1
+  foo(a)
+end sub
 
-  public sub at()
-    println(this.x)
-    return this.x
-  end sub
-end class
+foo(10)
 
-let f = new Foo
-println(f.x)
-let f() = 10
-println(f.x)
+sub refs(byref x)
+  return x
+end sub
+
+sub bar()
+  dim x = 10
+  let refs(x) = 5
+  println(x)
+end sub
+
+bar()
 
