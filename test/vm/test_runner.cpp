@@ -3,6 +3,7 @@
 
 #include "operations.cpp"
 #include "branches.cpp"
+#include "classes.cpp"
 
 std::unique_ptr<Vm> vm_run(std::string const &input) {
   Lexer lexer{ input };
@@ -39,5 +40,6 @@ std::size_t pass{}, total{};
 int main() {
   test_operations();
   test_branches();
+  test_classes();
   std::println("{} / {} tests passed", pass, total);
 }

@@ -1,22 +1,14 @@
 class Foo
-  public static dim y = 2
-  dim x = 10
+  public dim x = 5
 
-  public static sub make(n)
-    dim f = new Foo
-    let f.x = n * Foo.y
-    return f
-  end sub
-
-  public sub bar()
+  public sub at()
+    println(this.x)
     return this.x
   end sub
 end class
 
-dim x = new Foo
-println(x.x, " == null cause private")
-println(x.bar(), " == 10 cause default")
-
-let x = Foo.make(6)
-println(x.bar(), " == 12")
+let f = new Foo
+println(f.x)
+let f() = 10
+println(f.x)
 

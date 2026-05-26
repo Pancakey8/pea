@@ -53,6 +53,7 @@ std::expected<void, Error> IrGen::emit(Stmt const &stmt) {
       if (s.init) {
         if (auto res = emit(*s.init.value()); !res)
           return std::unexpected(res.error());
+	prog.push_back({ Instruction::Deref });
 	prog.push_back({ Instruction::LoadVar, var });
         prog.push_back({ Instruction::StoreVar });
       }
@@ -62,6 +63,7 @@ std::expected<void, Error> IrGen::emit(Stmt const &stmt) {
     [&](LetStmt const &s) -> std::expected<void, Error> {
       if (auto res = emit(*s.value); !res)
         return std::unexpected(res.error());
+      prog.push_back({ Instruction::Deref });
       if (auto res = emit(*s.lhs); !res)
         return std::unexpected(res.error());
       prog.push_back({ Instruction::StoreVar });
@@ -276,6 +278,7 @@ std::expected<void, Error> IrGen::emit(Stmt const &stmt) {
           auto res = emit(**field.decl.init);
           if (!res)
             return res;
+	  prog.push_back({ Instruction::Deref });
           prog.push_back({ Instruction::StoreVField, id });
           prog.push_back({ Instruction::Extension, fld.name });
         }
@@ -509,7 +512,7 @@ std::expected<void, Error> IrGen::sub_emit(SubDecl const &s, std::uint16_t id) {
   auto var = var_register("this");
   prog.push_back({ Instruction::DefineVar, var });
   prog.push_back({ Instruction::Extension, 0 });
-    prog.push_back({ Instruction::LoadVar, var });
+  prog.push_back({ Instruction::LoadVar, var });
   prog.push_back({ Instruction::StoreVar });
 
   for (auto const &stmt : s.body) {

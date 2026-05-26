@@ -25,7 +25,7 @@ struct PeaNaN {
   static PeaNaN of_char(char c);
   static PeaNaN of_func(std::size_t sz);
   static PeaNaN of_null();
-  static PeaNaN of_ref(PeaNaN *ref);
+  static PeaNaN of_ref(PeaNaN *ref, bool is_local);
   static PeaNaN of_obj(PeaObject *obj);
   static PeaNaN of_class(std::uint16_t c);
 
@@ -41,15 +41,17 @@ struct PeaNaN {
   char chr() const;
   std::size_t fn() const;
   PeaNaN *ref() const;
+  bool ref_local() const;
   PeaObject *obj() const;
   std::uint16_t cls() const;
 
-  PeaNaN get_member(Vm &vm, std::uint16_t id);
-  std::optional<std::size_t> get_method(Vm &vm, std::uint16_t id);
+  PeaNaN get_member(Vm &vm, std::uint16_t id) const;
+  std::optional<std::size_t> get_method(Vm &vm, std::uint16_t id) const;
 
-  std::uint16_t what();
+  std::uint16_t what() const;
 
   void deref();
+  PeaNaN const &canon() const;
   PeaNaN &canon();
 
   std::optional<double> coerce_num(Vm &vm);
@@ -179,13 +181,16 @@ struct BuiltinFns {
   static PeaNaN char_equals(Vm &vm, std::uint16_t argc);
   static PeaNaN string_equals(Vm &vm, std::uint16_t argc);
   static PeaNaN function_equals(Vm &vm, std::uint16_t argc);
+
+  // helper:
+  static std::string to_string(Vm &vm, PeaNaN val) ;
 };
 
 class Vm {
 public:
   explicit Vm(std::vector<std::uint8_t> bytes);
 
-  void run();
+  void run(std::optional<std::size_t> until = {});
 
 private:
   friend class BuiltinFns;
@@ -235,6 +240,8 @@ private:
   PeaNaN var_ref(std::size_t id);
 
   void dispatch_call(PeaNaN callee, std::uint16_t argc, std::uint16_t in_class = static_cast<std::uint16_t>(InternalObj::Null));
+  PeaNaN dispatch_util(std::size_t callee, std::uint16_t argc, std::uint16_t in_class = static_cast<std::uint16_t>(InternalObj::Null));
+  std::size_t util_on{0};
 
   std::size_t ip{};
 };

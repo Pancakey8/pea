@@ -122,7 +122,7 @@ void test_branches() {
                 "end if\n"
                 "end sub\n"
                 "let x = fibo(10)\n");
-    expect(vm->variables[0].is_num() && vm->variables[0].num() == 55.0);
+    expect(vm->variables[0].canon().is_num() && vm->variables[0].canon().num() == 55.0);
   }
   {
     vm = vm_run("dim x\n"

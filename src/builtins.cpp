@@ -1,8 +1,10 @@
+#include "irgen.hpp"
 #include "lexer.hpp"
 #include "vm.hpp"
 
 #include <cassert>
 #include <cstring>
+#include <string>
 #include <print>
 #include <system_error>
 
@@ -30,12 +32,11 @@ PeaNaN BuiltinFns::array_at(Vm &vm, std::uint16_t argc) {
     ind += step * (*n - 1);
     step *= arr->dims[dimc - 1 - i];
   }
-  return PeaNaN::of_ref(&arr->elems[ind]);
+  return PeaNaN::of_ref(&arr->elems[ind], false);
 }
 
-std::string to_string(PeaNaN val);
-
-void array_to_string_helper(const PeaObjArray *arr,
+void array_to_string_helper(Vm &vm,
+  const PeaObjArray *arr,
   std::size_t current_dim,
   std::size_t &flat_index,
   std::string &out) {
@@ -46,7 +47,7 @@ void array_to_string_helper(const PeaObjArray *arr,
     for (std::size_t i = 0; i < arr->dims[current_dim]; ++i) {
       // Convert the individual PeaNaN element to string (calling your main
       // function)
-      out += to_string(arr->elems[flat_index++]);
+      out += BuiltinFns::to_string(vm, arr->elems[flat_index++]);
       if (i < arr->dims[current_dim] - 1) {
         out += ", ";
       }
@@ -58,7 +59,7 @@ void array_to_string_helper(const PeaObjArray *arr,
   // Step case: Recursively wrap inner dimensions
   out += "[";
   for (std::size_t i = 0; i < arr->dims[current_dim]; ++i) {
-    array_to_string_helper(arr, current_dim + 1, flat_index, out);
+    array_to_string_helper(vm, arr, current_dim + 1, flat_index, out);
     if (i < arr->dims[current_dim] - 1) {
       out += ", ";
     }
@@ -66,7 +67,7 @@ void array_to_string_helper(const PeaObjArray *arr,
   out += "]";
 }
 
-std::string to_string(PeaNaN val) {
+std::string BuiltinFns::to_string(Vm &vm, PeaNaN val) {
   if (val.is_num()) {
     return std::format("{:g}", val.num());
   } else if (val.is_chr()) {
@@ -90,12 +91,21 @@ std::string to_string(PeaNaN val) {
 
       std::string result;
       std::size_t flat_index = 0;
-      array_to_string_helper(arr, 0, flat_index, result);
+      array_to_string_helper(vm, arr, 0, flat_index, result);
       return result;
     } break;
-    default:
-      assert(false && "General object");
-      break;
+    default: {
+      auto meth = val.get_method(vm, PEA_ID_TOSTRING);
+      if (!meth)
+        return "<object>";
+      vm.stack.push_back(val);
+      auto res = vm.dispatch_util(*meth, 1, val.what());
+      if (!res.is_obj() ||
+          res.obj()->kind != static_cast<std::uint16_t>(InternalObj::String))
+        return "<object>";
+      auto str = reinterpret_cast<PeaObjString*>(res.obj());
+      return std::string{str->str, str->len};
+    } break;
     }
   }
   return "";
@@ -105,7 +115,7 @@ PeaNaN BuiltinFns::println(Vm &vm, std::uint16_t argc) {
   for (std::uint16_t i = 1; i < argc; ++i) {
     auto val = vm.stack[vm.stack.size() - argc + i];
     val.deref();
-    std::print("{}", to_string(val));
+    std::print("{}", to_string(vm, val));
   }
   std::println("");
   return PeaNaN::of_null();
@@ -114,7 +124,7 @@ PeaNaN BuiltinFns::println(Vm &vm, std::uint16_t argc) {
 PeaNaN BuiltinFns::array_tostring(Vm &vm, std::uint16_t argc) {
   auto o = vm.stack.back();
   o.deref();
-  auto str = to_string(o);
+  auto str = to_string(vm, o);
   auto s = PeaObjString::make(str.size(), str.c_str());
   return PeaNaN::of_obj(reinterpret_cast<PeaObject *>(s));
 }
@@ -122,7 +132,7 @@ PeaNaN BuiltinFns::array_tostring(Vm &vm, std::uint16_t argc) {
 PeaNaN BuiltinFns::num_tostring(Vm &vm, std::uint16_t argc) {
   auto o = vm.stack.back();
   o.deref();
-  auto str = to_string(o);
+  auto str = to_string(vm, o);
   auto s = PeaObjString::make(str.size(), str.c_str());
   return PeaNaN::of_obj(reinterpret_cast<PeaObject *>(s));
 }
@@ -130,7 +140,7 @@ PeaNaN BuiltinFns::num_tostring(Vm &vm, std::uint16_t argc) {
 PeaNaN BuiltinFns::null_tostring(Vm &vm, std::uint16_t argc) {
   auto o = vm.stack.back();
   o.deref();
-  auto str = to_string(o);
+  auto str = to_string(vm, o);
   auto s = PeaObjString::make(str.size(), str.c_str());
   return PeaNaN::of_obj(reinterpret_cast<PeaObject *>(s));
 }
@@ -138,7 +148,7 @@ PeaNaN BuiltinFns::null_tostring(Vm &vm, std::uint16_t argc) {
 PeaNaN BuiltinFns::char_tostring(Vm &vm, std::uint16_t argc) {
   auto o = vm.stack.back();
   o.deref();
-  auto str = to_string(o);
+  auto str = to_string(vm, o);
   auto s = PeaObjString::make(str.size(), str.c_str());
   return PeaNaN::of_obj(reinterpret_cast<PeaObject *>(s));
 }
@@ -146,7 +156,7 @@ PeaNaN BuiltinFns::char_tostring(Vm &vm, std::uint16_t argc) {
 PeaNaN BuiltinFns::string_tostring(Vm &vm, std::uint16_t argc) {
   auto o = vm.stack.back();
   o.deref();
-  auto str = to_string(o);
+  auto str = to_string(vm, o);
   auto s = PeaObjString::make(str.size(), str.c_str());
   return PeaNaN::of_obj(reinterpret_cast<PeaObject *>(s));
 }
@@ -154,7 +164,7 @@ PeaNaN BuiltinFns::string_tostring(Vm &vm, std::uint16_t argc) {
 PeaNaN BuiltinFns::function_tostring(Vm &vm, std::uint16_t argc) {
   auto o = vm.stack.back();
   o.deref();
-  auto str = to_string(o);
+  auto str = to_string(vm, o);
   auto s = PeaObjString::make(str.size(), str.c_str());
   return PeaNaN::of_obj(reinterpret_cast<PeaObject *>(s));
 }

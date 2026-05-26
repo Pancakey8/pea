@@ -46,9 +46,9 @@ PeaNaN PeaNaN::of_func(std::size_t sz) {
 
 PeaNaN PeaNaN::of_null() { return { QNAN | make_tag(TAG_NULL) }; }
 
-PeaNaN PeaNaN::of_ref(PeaNaN *ref) {
+PeaNaN PeaNaN::of_ref(PeaNaN *ref, bool is_local) {
   return { QNAN | make_tag(TAG_REF) |
-           (reinterpret_cast<std::uint64_t>(ref) & PAYLOAD_MASK) };
+           (reinterpret_cast<std::uint64_t>(ref) & PAYLOAD_MASK) | is_local };
 }
 
 PeaNaN PeaNaN::of_obj(PeaObject *ref) {
@@ -111,10 +111,15 @@ PeaNaN *PeaNaN::ref() const {
   if (raw & (1ULL << 47)) {
     raw |= 0xFFFF000000000000ULL;
   }
-  return reinterpret_cast<PeaNaN *>(raw);
+  return reinterpret_cast<PeaNaN *>(raw & ~1);
 }
 
-PeaNaN PeaNaN::get_member(Vm &vm, std::uint16_t id) {
+bool PeaNaN::ref_local() const {
+  std::uint64_t raw = bits & PAYLOAD_MASK;
+  return raw & 1;
+}
+
+PeaNaN PeaNaN::get_member(Vm &vm, std::uint16_t id) const {
   auto self = *this;
   self.deref();
   bool see_privates{ !vm.call_stack.empty() &&
@@ -124,21 +129,28 @@ PeaNaN PeaNaN::get_member(Vm &vm, std::uint16_t id) {
     auto &stats = vm.vtables[self.cls()].static_fields;
     for (std::size_t i = 0; i < stats.size(); ++i) {
       if ((see_privates || stats[i].is_public) && stats[i].name == id)
-        return PeaNaN::of_ref(&stats[i].val);
+        return PeaNaN::of_ref(&stats[i].val, false);
     }
     return PeaNaN::of_null();
   }
 
+  if (!self.is_obj())
+    return PeaNaN::of_null();
+  if (self.what() == static_cast<std::uint16_t>(InternalObj::Array) ||
+      self.what() == static_cast<std::uint16_t>(InternalObj::String))
+    return PeaNaN::of_null();
+
   auto &fields = vm.vtables[self.what()].fields;
   for (std::size_t i = 0; i < fields.size(); ++i) {
     if ((see_privates || fields[i].is_public) && fields[i].name == id)
-      return PeaNaN::of_ref(&fields[i].val);
+      return PeaNaN::of_ref(
+        &reinterpret_cast<PeaObjGeneric *>(self.obj())->vals[i], false);
   }
 
   return PeaNaN::of_null();
 }
 
-std::optional<std::size_t> PeaNaN::get_method(Vm &vm, std::uint16_t id) {
+std::optional<std::size_t> PeaNaN::get_method(Vm &vm, std::uint16_t id) const {
   auto self = *this;
   self.deref();
   bool see_privates{ !vm.call_stack.empty() &&
@@ -168,7 +180,7 @@ std::optional<std::size_t> PeaNaN::get_method(Vm &vm, std::uint16_t id) {
   return {};
 }
 
-std::uint16_t PeaNaN::what() {
+std::uint16_t PeaNaN::what() const {
   auto self = *this;
   self.deref();
   if (self.is_num())
@@ -194,6 +206,14 @@ void PeaNaN::deref() {
   }
 }
 
+PeaNaN const &PeaNaN::canon() const {
+  if (is_ref()) {
+    return *this->ref();
+  } else {
+    return *this;
+  }
+}
+
 PeaNaN &PeaNaN::canon() {
   if (is_ref()) {
     return *this->ref();
@@ -211,10 +231,7 @@ std::optional<double> PeaNaN::coerce_num(Vm &vm) {
 
   if (auto meth = self.get_method(vm, PEA_ID_TONUM)) {
     vm.stack.push_back(self);
-    vm.dispatch_call(PeaNaN::of_func(*meth), 1, self.what());
-    auto val = vm.stack.back();
-    vm.stack.pop_back();
-    val.deref();
+    auto val = vm.dispatch_util(*meth, 1, self.what());
     if (!val.is_num())
       return {};
     return val.num();
@@ -236,10 +253,7 @@ std::optional<std::string> PeaNaN::coerce_str(Vm &vm) {
     if (!meth)
       return {};
     vm.stack.push_back(self);
-    vm.dispatch_call(PeaNaN::of_func(*meth), 1, self.what());
-    auto val = vm.stack.back();
-    vm.stack.pop_back();
-    val.deref();
+    auto val = vm.dispatch_util(*meth, 1, self.what());
     if (!val.is_obj() ||
         val.obj()->kind != static_cast<std::uint16_t>(InternalObj::String))
       return {};
@@ -255,10 +269,7 @@ bool PeaNaN::is_truthy(Vm &vm) {
   self.deref();
   if (auto meth = self.get_method(vm, PEA_ID_ISTRUTHY)) {
     vm.stack.push_back(self);
-    vm.dispatch_call(PeaNaN::of_func(*meth), 1, self.what());
-    auto val = vm.stack.back();
-    vm.stack.pop_back();
-    val.deref();
+    auto val = vm.dispatch_util(*meth, 1, self.what());
     if (!val.is_num())
       return false;
     return val.num() != 0;
@@ -271,18 +282,15 @@ bool PeaNaN::equals(Vm &vm, PeaNaN other) {
   auto self = *this;
   self.deref();
   other.deref();
+  if (self.is_class() && other.is_class())
+    return self.cls() == other.cls();
   if (self.what() != other.what())
-    return false;
-  if (self.cls() != other.cls()) // what() for classes returns the class id
     return false;
 
   if (auto meth = self.get_method(vm, PEA_ID_EQUALS)) {
     vm.stack.push_back(self);
     vm.stack.push_back(other);
-    vm.dispatch_call(PeaNaN::of_func(*meth), 2, self.what());
-    auto val = vm.stack.back();
-    vm.stack.pop_back();
-    val.deref();
+    auto val = vm.dispatch_util(*meth, 2, self.what());
     return val.is_truthy(vm);
   } else {
     return false;
@@ -381,8 +389,9 @@ Vm::Vm(std::vector<std::uint8_t> bytes)
   move_start();
 }
 
-void Vm::run() {
-  while (ip < bytes.size()) {
+void Vm::run(std::optional<std::size_t> until) {
+  auto max = until ? *until : bytes.size();
+  while (ip < max) {
     auto instr = ip;
     auto op = read<std::uint8_t>();
     switch (static_cast<OpCode>(op)) {
@@ -695,15 +704,17 @@ void Vm::run() {
         auto meth_at = callee.get_method(*this, PEA_ID_AT);
         if (!meth_at)
           return error("Indexing non-indexable object");
-        dispatch_call(PeaNaN::of_func(*meth_at), argc + 1);
-      } else {
+        dispatch_call(
+          PeaNaN::of_func(*meth_at), argc + 1, callee.canon().what());
+      } else if (callee.canon().is_fn()) {
         dispatch_call(callee, argc + 1);
       }
     } break;
     case OpCode::Return: {
       auto ret = stack.back();
       stack.pop_back();
-      ret.deref();
+      if (ret.is_ref() && ret.ref_local())
+	ret.deref();
       auto frame = call_stack.back();
       call_stack.pop_back();
       stack.resize(frame.stack_at);
@@ -726,7 +737,7 @@ void Vm::run() {
       obj->obj.kind = classptr.cls();
       std::size_t idx = 0;
       for (auto const f : vtables[classptr.cls()].fields) {
-        obj->vals[idx++] = f.val;
+        obj->vals[idx++] = f.val.canon();
       }
 
       stack.push_back(PeaNaN::of_obj(reinterpret_cast<PeaObject *>(obj)));
@@ -860,13 +871,13 @@ PeaNaN Vm::var_ref(std::size_t id) {
       if (shadow_stack[i].first == id) {
         if (shadow_stack[i].second.is_ref())
           return shadow_stack[i].second;
-        return PeaNaN::of_ref(&shadow_stack[i].second);
+        return PeaNaN::of_ref(&shadow_stack[i].second, true);
       }
     }
   }
 
   return variables[id].is_ref() ? variables[id]
-                                : PeaNaN::of_ref(&variables[id]);
+                                : PeaNaN::of_ref(&variables[id], false);
 }
 
 void Vm::dispatch_call(
@@ -887,6 +898,18 @@ void Vm::dispatch_call(
   } else {
     return error("Trying to call non-function");
   }
+}
+
+PeaNaN Vm::dispatch_util(
+  std::size_t callee, std::uint16_t argc, std::uint16_t in_class) {
+  auto top = stack.size() - argc;
+  auto until = ip;
+  dispatch_call(PeaNaN::of_func(callee), argc, in_class);
+  run(until);
+  auto val = stack.back();
+  stack.resize(top);
+  val.deref();
+  return val;
 }
 
 template <typename Int> Int Vm::read() {
