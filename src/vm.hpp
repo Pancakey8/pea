@@ -47,6 +47,8 @@ struct PeaNaN {
   PeaNaN get_member(Vm &vm, std::uint16_t id);
   std::optional<std::size_t> get_method(Vm &vm, std::uint16_t id);
 
+  std::uint16_t what();
+
   void deref();
   PeaNaN &canon();
 
@@ -67,8 +69,12 @@ enum class InternalObj : std::uint16_t {
   Class = (1 << 16) - 7,
 };
 
+struct PeaObject {
+  std::uint16_t kind;
+};
+
 struct PeaObjString {
-  std::uint16_t kind{ static_cast<std::uint16_t>(InternalObj::String) };
+  PeaObject obj;
   std::size_t len;
   char str[];
 
@@ -76,7 +82,7 @@ struct PeaObjString {
 };
 
 struct PeaObjArray {
-  std::uint16_t kind{ static_cast<std::uint16_t>(InternalObj::Array) };
+  PeaObject obj;
   std::size_t dim;
   std::size_t *dims;
   std::size_t len;
@@ -85,18 +91,38 @@ struct PeaObjArray {
   static PeaObjArray *make(std::size_t dim, std::size_t *dims, std::size_t len);
 };
 
-struct PeaObject {
-  std::uint16_t kind;
+struct PeaObjGeneric {
+  PeaObject obj;
+  PeaNaN vals[];
 };
 
 struct CallFrame {
   std::size_t return_to;
   std::size_t stack_at;
   std::size_t shadows_at;
+  std::uint16_t in_class;
 };
 
 struct PeaVTable {
-  std::vector<std::pair<std::uint16_t, std::size_t>> table;
+  struct Method {
+    bool is_public;
+    std::uint16_t name;
+    std::size_t sub;
+
+    explicit Method(std::uint16_t name, std::size_t sub)
+        : is_public(true), name(name), sub(sub) {};
+    explicit Method(bool is_public, std::uint16_t name, std::size_t sub)
+        : is_public(is_public), name(name), sub(sub) {};
+  };
+
+  struct Field {
+    bool is_public;
+    std::uint16_t name;
+    PeaNaN val;
+  };
+
+  std::vector<Method> methods, static_methods;
+  std::vector<Field> fields, static_fields;
 };
 
 class Vm;
@@ -208,7 +234,7 @@ private:
   PeaNaN var_get(std::size_t id);
   PeaNaN var_ref(std::size_t id);
 
-  void dispatch_call(PeaNaN callee, std::uint16_t argc);
+  void dispatch_call(PeaNaN callee, std::uint16_t argc, std::uint16_t in_class = static_cast<std::uint16_t>(InternalObj::Null));
 
   std::size_t ip{};
 };

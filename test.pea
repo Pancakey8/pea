@@ -1,7 +1,22 @@
-dim x = 0
-dim i = 2
+class Foo
+  public static dim y = 2
+  dim x = 10
 
-for i = 0 to 10 step i
-  let x = x + i
-end for
+  public static sub make(n)
+    dim f = new Foo
+    let f.x = n * Foo.y
+    return f
+  end sub
+
+  public sub bar()
+    return this.x
+  end sub
+end class
+
+dim x = new Foo
+println(x.x, " == null cause private")
+println(x.bar(), " == 10 cause default")
+
+let x = Foo.make(6)
+println(x.bar(), " == 12")
 

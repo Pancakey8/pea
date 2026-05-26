@@ -9,6 +9,7 @@
 #include <cstring>
 #include <iostream>
 #include <print>
+#include <ranges>
 
 constexpr std::uint64_t QNAN = 0x7ff8000000000000ULL;
 constexpr std::uint64_t TAG_SHIFT = 48;
@@ -116,58 +117,75 @@ PeaNaN *PeaNaN::ref() const {
 PeaNaN PeaNaN::get_member(Vm &vm, std::uint16_t id) {
   auto self = *this;
   self.deref();
-  if (!self.is_obj())
-    return PeaNaN::of_null();
-  auto val = self.obj();
-  // TODO: These are immutable, make them private + add getters
-  switch (static_cast<InternalObj>(val->kind)) {
-  case InternalObj::String: {
-    if (id == PEA_ID_LENGTH) {
-      return PeaNaN::of_double(reinterpret_cast<PeaObjString *>(val)->len);
-    } else {
-      return PeaNaN::of_null();
-    }
-  } break;
-  case InternalObj::Array: {
-    if (id == PEA_ID_LENGTH) {
-      return PeaNaN::of_double(reinterpret_cast<PeaObjArray *>(val)->len);
-    } else {
-      return PeaNaN::of_null();
-    }
-  } break;
+  bool see_privates{ !vm.call_stack.empty() &&
+                     vm.call_stack.back().in_class == self.what() };
 
-  default:
-    assert(false && "TODO: General objects");
-    break;
+  if (self.is_class()) {
+    auto &stats = vm.vtables[self.cls()].static_fields;
+    for (std::size_t i = 0; i < stats.size(); ++i) {
+      if ((see_privates || stats[i].is_public) && stats[i].name == id)
+        return PeaNaN::of_ref(&stats[i].val);
+    }
+    return PeaNaN::of_null();
   }
+
+  auto &fields = vm.vtables[self.what()].fields;
+  for (std::size_t i = 0; i < fields.size(); ++i) {
+    if ((see_privates || fields[i].is_public) && fields[i].name == id)
+      return PeaNaN::of_ref(&fields[i].val);
+  }
+
+  return PeaNaN::of_null();
 }
 
 std::optional<std::size_t> PeaNaN::get_method(Vm &vm, std::uint16_t id) {
   auto self = *this;
   self.deref();
-  PeaVTable table;
-  if (self.is_num()) {
-    table = vm.vtables[static_cast<std::uint16_t>(InternalObj::Number)];
-  } else if (self.is_chr()) {
-    table = vm.vtables[static_cast<std::uint16_t>(InternalObj::Char)];
-  } else if (self.is_fn()) {
-    table = vm.vtables[static_cast<std::uint16_t>(InternalObj::Function)];
-  } else if (self.is_null()) {
-    table = vm.vtables[static_cast<std::uint16_t>(InternalObj::Null)];
-  } else if (self.is_obj()) {
-    table = vm.vtables[self.obj()->kind];
-  } else if (self.is_class()) {
-    table = {};
+  bool see_privates{ !vm.call_stack.empty() &&
+                     vm.call_stack.back().in_class == self.what() };
+
+  if (self.is_class()) {
+    auto table = vm.vtables[self.cls()];
+    if (auto it = std::find_if(table.static_methods.begin(),
+          table.static_methods.end(),
+          [see_privates, id](
+            auto x) { return (see_privates || x.is_public) && x.name == id; });
+      it != table.methods.end()) {
+      return it->sub;
+    }
   }
 
-  if (auto it = std::find_if(table.table.begin(),
-        table.table.end(),
-        [id](auto x) { return x.first == id; });
-    it != table.table.end()) {
-    return it->second;
+  PeaVTable table = vm.vtables[self.what()];
+
+  if (auto it = std::find_if(table.methods.begin(),
+        table.methods.end(),
+        [see_privates, id](
+          auto x) { return (see_privates || x.is_public) && x.name == id; });
+    it != table.methods.end()) {
+    return it->sub;
   }
 
   return {};
+}
+
+std::uint16_t PeaNaN::what() {
+  auto self = *this;
+  self.deref();
+  if (self.is_num())
+    return static_cast<std::uint16_t>(InternalObj::Number);
+  else if (self.is_null())
+    return static_cast<std::uint16_t>(InternalObj::Null);
+  else if (self.is_chr())
+    return static_cast<std::uint16_t>(InternalObj::Char);
+  else if (self.is_fn())
+    return static_cast<std::uint16_t>(InternalObj::Function);
+  else if (self.is_obj())
+    return self.obj()->kind;
+  else if (self.is_class())
+    return self.cls();
+
+  assert(false && "Unreachable");
+  return static_cast<std::uint16_t>(InternalObj::Null);
 }
 
 void PeaNaN::deref() {
@@ -192,8 +210,8 @@ std::optional<double> PeaNaN::coerce_num(Vm &vm) {
     return self.num();
 
   if (auto meth = self.get_method(vm, PEA_ID_TONUM)) {
-    vm.stack.push_back(*this);
-    vm.dispatch_call(PeaNaN::of_func(*meth), 1);
+    vm.stack.push_back(self);
+    vm.dispatch_call(PeaNaN::of_func(*meth), 1, self.what());
     auto val = vm.stack.back();
     vm.stack.pop_back();
     val.deref();
@@ -217,8 +235,8 @@ std::optional<std::string> PeaNaN::coerce_str(Vm &vm) {
     auto meth = self.get_method(vm, PEA_ID_TOSTRING);
     if (!meth)
       return {};
-    vm.stack.push_back(*this);
-    vm.dispatch_call(PeaNaN::of_func(*meth), 1);
+    vm.stack.push_back(self);
+    vm.dispatch_call(PeaNaN::of_func(*meth), 1, self.what());
     auto val = vm.stack.back();
     vm.stack.pop_back();
     val.deref();
@@ -236,8 +254,8 @@ bool PeaNaN::is_truthy(Vm &vm) {
   auto self = *this;
   self.deref();
   if (auto meth = self.get_method(vm, PEA_ID_ISTRUTHY)) {
-    vm.stack.push_back(*this);
-    vm.dispatch_call(PeaNaN::of_func(*meth), 1);
+    vm.stack.push_back(self);
+    vm.dispatch_call(PeaNaN::of_func(*meth), 1, self.what());
     auto val = vm.stack.back();
     vm.stack.pop_back();
     val.deref();
@@ -253,26 +271,15 @@ bool PeaNaN::equals(Vm &vm, PeaNaN other) {
   auto self = *this;
   self.deref();
   other.deref();
-  if (self.is_num() != other.is_num())
+  if (self.what() != other.what())
     return false;
-  if (self.is_chr() != other.is_chr())
-    return false;
-  if (self.is_fn() != other.is_fn())
-    return false;
-  if (self.is_null() != other.is_null())
-    return false;
-  if (self.is_obj() != other.is_obj())
-    return false;
-  if (self.is_class() != other.is_class())
-    return false;
-
-  if (self.is_obj() && other.is_obj() && self.obj()->kind != other.obj()->kind)
+  if (self.cls() != other.cls()) // what() for classes returns the class id
     return false;
 
   if (auto meth = self.get_method(vm, PEA_ID_EQUALS)) {
     vm.stack.push_back(self);
     vm.stack.push_back(other);
-    vm.dispatch_call(PeaNaN::of_func(*meth), 2);
+    vm.dispatch_call(PeaNaN::of_func(*meth), 2, self.what());
     auto val = vm.stack.back();
     vm.stack.pop_back();
     val.deref();
@@ -285,7 +292,8 @@ bool PeaNaN::equals(Vm &vm, PeaNaN other) {
 PeaObjString *PeaObjString::make(std::size_t len, char const *data) {
   auto mem = std::malloc(offsetof(PeaObjString, str) + len + 1);
   PeaObjString *obj = ::new (mem) PeaObjString;
-  obj->kind = static_cast<std::uint16_t>(InternalObj::String);
+  obj->obj =
+    PeaObject{ .kind = static_cast<std::uint16_t>(InternalObj::String) };
   obj->len = len;
   std::memcpy(obj->str, data, len);
   obj->str[obj->len] = '\0';
@@ -296,7 +304,8 @@ PeaObjArray *PeaObjArray::make(
   std::size_t dim, std::size_t *dims, std::size_t len) {
   auto mem = std::malloc(offsetof(PeaObjArray, elems) + len * sizeof(PeaNaN));
   PeaObjArray *arr = ::new (mem) PeaObjArray;
-  arr->kind = static_cast<std::uint16_t>(InternalObj::Array);
+  arr->obj =
+    PeaObject{ .kind = static_cast<std::uint16_t>(InternalObj::Array) };
   arr->dim = dim;
   arr->dims = dims;
   arr->len = len;
@@ -305,41 +314,69 @@ PeaObjArray *PeaObjArray::make(
 
 Vm::Vm(std::vector<std::uint8_t> bytes)
     : bytes(std::move(bytes)), variables{ 1ULL << 16, PeaNaN::of_null() } {
-  vtables[static_cast<std::uint16_t>(InternalObj::String)] = { {
-    { PEA_ID_TOSTRING, BuiltinFns::STRING_TOSTRING },
-    { PEA_ID_TONUM, BuiltinFns::STRING_TONUM },
-    { PEA_ID_ISTRUTHY, BuiltinFns::STRING_ISTRUTHY },
-    { PEA_ID_EQUALS, BuiltinFns::STRING_EQUALS },
-  } };
-  vtables[static_cast<std::uint16_t>(InternalObj::Array)] = { {
-    { PEA_ID_AT, BuiltinFns::ARRAY_AT },
-    { PEA_ID_TOSTRING, BuiltinFns::ARRAY_TOSTRING },
-    { PEA_ID_ISTRUTHY, BuiltinFns::ARRAY_ISTRUTHY },
-    { PEA_ID_EQUALS, BuiltinFns::ARRAY_EQUALS },
-  } };
-  vtables[static_cast<std::uint16_t>(InternalObj::Char)] = { {
-    { PEA_ID_TOSTRING, BuiltinFns::CHAR_TOSTRING },
-    { PEA_ID_TONUM, BuiltinFns::CHAR_TONUM },
-    { PEA_ID_ISTRUTHY, BuiltinFns::CHAR_ISTRUTHY },
-    { PEA_ID_EQUALS, BuiltinFns::CHAR_EQUALS },
-  } };
-  vtables[static_cast<std::uint16_t>(InternalObj::Number)] = { {
-    { PEA_ID_TOSTRING, BuiltinFns::NUM_TOSTRING },
-    { PEA_ID_TONUM, BuiltinFns::NUM_TONUM },
-    { PEA_ID_ISTRUTHY, BuiltinFns::NUM_ISTRUTHY },
-    { PEA_ID_EQUALS, BuiltinFns::NUM_EQUALS },
-  } };
-  vtables[static_cast<std::uint16_t>(InternalObj::Function)] = { {
-    { PEA_ID_TOSTRING, BuiltinFns::FUNCTION_TOSTRING },
-    { PEA_ID_ISTRUTHY, BuiltinFns::FUNCTION_ISTRUTHY },
-    { PEA_ID_EQUALS, BuiltinFns::FUNCTION_EQUALS },
-  } };
-  vtables[static_cast<std::uint16_t>(InternalObj::Null)] = { {
-    { PEA_ID_TOSTRING, BuiltinFns::NULL_TOSTRING },
-    { PEA_ID_TONUM, BuiltinFns::NULL_TONUM },
-    { PEA_ID_ISTRUTHY, BuiltinFns::NULL_ISTRUTHY },
-    { PEA_ID_EQUALS, BuiltinFns::NULL_EQUALS },
-  } };
+  vtables[static_cast<std::uint16_t>(InternalObj::String)] = {
+    {
+      PeaVTable::Method(PEA_ID_TOSTRING, BuiltinFns::STRING_TOSTRING),
+      PeaVTable::Method(PEA_ID_TONUM, BuiltinFns::STRING_TONUM),
+      PeaVTable::Method(PEA_ID_ISTRUTHY, BuiltinFns::STRING_ISTRUTHY),
+      PeaVTable::Method(PEA_ID_EQUALS, BuiltinFns::STRING_EQUALS),
+    },
+    {}
+  };
+  vtables[static_cast<std::uint16_t>(InternalObj::Array)] = {
+    {
+      PeaVTable::Method(PEA_ID_AT, BuiltinFns::ARRAY_AT),
+      PeaVTable::Method(PEA_ID_TOSTRING, BuiltinFns::ARRAY_TOSTRING),
+      PeaVTable::Method(PEA_ID_ISTRUTHY, BuiltinFns::ARRAY_ISTRUTHY),
+      PeaVTable::Method(PEA_ID_EQUALS, BuiltinFns::ARRAY_EQUALS),
+    },
+    {},
+    {},
+    {}
+  };
+  vtables[static_cast<std::uint16_t>(InternalObj::Char)] = {
+    {
+      PeaVTable::Method(PEA_ID_TOSTRING, BuiltinFns::CHAR_TOSTRING),
+      PeaVTable::Method(PEA_ID_TONUM, BuiltinFns::CHAR_TONUM),
+      PeaVTable::Method(PEA_ID_ISTRUTHY, BuiltinFns::CHAR_ISTRUTHY),
+      PeaVTable::Method(PEA_ID_EQUALS, BuiltinFns::CHAR_EQUALS),
+    },
+    {},
+    {},
+    {}
+  };
+  vtables[static_cast<std::uint16_t>(InternalObj::Number)] = {
+    {
+      PeaVTable::Method(PEA_ID_TOSTRING, BuiltinFns::NUM_TOSTRING),
+      PeaVTable::Method(PEA_ID_TONUM, BuiltinFns::NUM_TONUM),
+      PeaVTable::Method(PEA_ID_ISTRUTHY, BuiltinFns::NUM_ISTRUTHY),
+      PeaVTable::Method(PEA_ID_EQUALS, BuiltinFns::NUM_EQUALS),
+    },
+    {},
+    {},
+    {}
+  };
+  vtables[static_cast<std::uint16_t>(InternalObj::Function)] = {
+    {
+      PeaVTable::Method(PEA_ID_TOSTRING, BuiltinFns::FUNCTION_TOSTRING),
+      PeaVTable::Method(PEA_ID_ISTRUTHY, BuiltinFns::FUNCTION_ISTRUTHY),
+      PeaVTable::Method(PEA_ID_EQUALS, BuiltinFns::FUNCTION_EQUALS),
+    },
+    {},
+    {},
+    {}
+  };
+  vtables[static_cast<std::uint16_t>(InternalObj::Null)] = {
+    {
+      PeaVTable::Method(PEA_ID_TOSTRING, BuiltinFns::NULL_TOSTRING),
+      PeaVTable::Method(PEA_ID_TONUM, BuiltinFns::NULL_TONUM),
+      PeaVTable::Method(PEA_ID_ISTRUTHY, BuiltinFns::NULL_ISTRUTHY),
+      PeaVTable::Method(PEA_ID_EQUALS, BuiltinFns::NULL_EQUALS),
+    },
+    {},
+    {},
+    {}
+  };
   variables[PEA_ID_PRINTLN] = PeaNaN::of_func(BuiltinFns::PRINTLN);
   move_start();
 }
@@ -551,7 +588,7 @@ void Vm::run() {
       auto argc = read<std::uint16_t>();
       auto self = stack[stack.size() - argc];
       if (auto meth_off = self.get_method(*this, meth)) {
-        dispatch_call(PeaNaN::of_func(*meth_off), argc);
+        dispatch_call(PeaNaN::of_func(*meth_off), argc, self.what());
       } else {
         return error("Dispatching non-existent method");
       }
@@ -677,15 +714,40 @@ void Vm::run() {
     case OpCode::Construct: {
       auto classptr = stack.back();
       stack.pop_back();
-      stack.push_back(PeaNaN::of_null());
-      // TODO
+      classptr.deref();
+
+      if (!classptr.is_class())
+        return error("Cannot construct from non-class");
+
+      auto obj = static_cast<PeaObjGeneric *>(
+        malloc(offsetof(PeaObjGeneric, vals) +
+               vtables[classptr.cls()].fields.size() * sizeof(PeaNaN)));
+
+      obj->obj.kind = classptr.cls();
+      std::size_t idx = 0;
+      for (auto const f : vtables[classptr.cls()].fields) {
+        obj->vals[idx++] = f.val;
+      }
+
+      stack.push_back(PeaNaN::of_obj(reinterpret_cast<PeaObject *>(obj)));
     } break;
     case OpCode::StoreVField: {
       auto table = read<std::uint16_t>();
       auto field = read<std::uint16_t>();
       auto val = stack.back();
       stack.pop_back();
-      // TODO
+      if (auto fld = std::find_if(vtables[table].fields.begin(),
+            vtables[table].fields.end(),
+            [&field](auto x) { return x.name == field; });
+        fld != vtables[table].fields.end()) {
+        fld->val = val;
+      } else if (auto sfld = std::find_if(vtables[table].static_fields.begin(),
+                   vtables[table].static_fields.end(),
+                   [&field](auto x) { return x.name == field; });
+        sfld != vtables[table].static_fields.end()) {
+        sfld->val = val;
+      } else
+        return error("Field not found");
     } break;
     default:
       return error("Invalid instruction");
@@ -703,20 +765,34 @@ void Vm::move_start() {
   auto classes = read<std::size_t>();
   auto class_count = read<std::uint16_t>();
   for (std::uint16_t i = 0; i < class_count; ++i) {
+    PeaVTable table{};
     auto fields = read<std::size_t>();
     for (std::size_t j = 0; j < fields; ++j) {
       bool is_public = read<std::uint8_t>();
       bool is_static = read<std::uint8_t>();
       auto name = read<std::uint16_t>();
+      if (is_static) {
+        table.static_fields.push_back(
+          PeaVTable::Field{ is_public, name, PeaNaN::of_null() });
+      } else {
+        table.fields.push_back(
+          PeaVTable::Field{ is_public, name, PeaNaN::of_null() });
+      }
     }
     auto methods = read<std::size_t>();
     for (std::size_t j = 0; j < methods; ++j) {
       bool is_public = read<std::uint8_t>();
       bool is_static = read<std::uint8_t>();
       auto name = read<std::uint16_t>();
-      auto sub = read<std::uint16_t>();
+      auto sub = read<std::uint64_t>();
+      if (is_static) {
+        table.static_methods.push_back(
+          PeaVTable::Method{ is_public, name, sub });
+      } else {
+        table.methods.push_back(PeaVTable::Method{ is_public, name, sub });
+      }
     }
-    // TODO
+    vtables[i] = std::move(table);
   }
   auto body = read<std::size_t>();
 }
@@ -793,7 +869,8 @@ PeaNaN Vm::var_ref(std::size_t id) {
                                 : PeaNaN::of_ref(&variables[id]);
 }
 
-void Vm::dispatch_call(PeaNaN callee, std::uint16_t argc) {
+void Vm::dispatch_call(
+  PeaNaN callee, std::uint16_t argc, std::uint16_t in_class) {
   callee.deref();
   if (callee.is_fn()) {
     if (callee.fn() > bytes.size()) {
@@ -804,7 +881,7 @@ void Vm::dispatch_call(PeaNaN callee, std::uint16_t argc) {
       stack.push_back(val);
     } else {
       std::size_t top = stack.size() - argc;
-      call_stack.push_back({ ip, top, shadow_stack.size() });
+      call_stack.push_back({ ip, top, shadow_stack.size(), in_class });
       ip = callee.fn() + 8;
     }
   } else {

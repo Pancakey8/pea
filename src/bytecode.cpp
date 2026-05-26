@@ -284,7 +284,9 @@ void BytecodeEmitter::emit_classes(std::vector<std::uint8_t> &out) {
       emit_le(out, out.end(), static_cast<std::uint8_t>(meth.is_public));
       emit_le(out, out.end(), static_cast<std::uint8_t>(meth.is_static));
       emit_le(out, out.end(), static_cast<std::uint16_t>(meth.name));
+      resolve_subs.push_back(out.size());
       emit_le(out, out.end(), static_cast<std::uint16_t>(meth.id));
+      out.resize(out.size() + 6);
     }
   }
 

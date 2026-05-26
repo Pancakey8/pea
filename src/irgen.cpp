@@ -135,7 +135,6 @@ std::expected<void, Error> IrGen::emit(Stmt const &stmt) {
       prog.push_back({ Instruction::Extension, 0 });
       if (auto res = emit(*s.start); !res)
         return std::unexpected(res.error());
-      prog.push_back({ Instruction::Deref });
       prog.push_back({ Instruction::LoadVar, var });
       prog.push_back({ Instruction::StoreVar });
 
