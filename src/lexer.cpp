@@ -158,7 +158,9 @@ std::expected<Token, Error> Lexer::read_ident_or_keyword() {
       {"or", TokenType::KW_Or},       {"not", TokenType::KW_Not},
       {"sub", TokenType::KW_Sub},     {"return", TokenType::KW_Return},
       {"break", TokenType::KW_Break}, {"continue", TokenType::KW_Continue},
-      {"byref", TokenType::KW_ByRef}, };
+      {"byref", TokenType::KW_ByRef}, {"class", TokenType::KW_Class},
+      {"public", TokenType::KW_Public}, {"private", TokenType::KW_Private},
+      {"static", TokenType::KW_Static}, {"new", TokenType::KW_New},};
 
   if (auto it = keywords.find(lower); it != keywords.end()) {
     // Special handling for "end if", "end for", and "end sub"
@@ -178,6 +180,10 @@ std::expected<Token, Error> Lexer::read_ident_or_keyword() {
         pos += 3;
         col += 3;
         return Token{TokenType::KW_EndSub, "end sub", 0, 0, {line, start_col}, {line, col}};
+      } else if (pos + 5 <= source.size() && to_lower(source.substr(pos, 5)) == "class") {
+        pos += 5;
+        col += 5;
+        return Token{TokenType::KW_EndClass, "end class", 0, 0, {line, start_col}, {line, col}};
       }
       pos = save_pos;
       col = save_col;
@@ -291,8 +297,17 @@ std::string to_string(TokenType type) {
     case TokenType::Colon: return "Colon";
     case TokenType::EOL: return "EOL";
     case TokenType::EndOfFile: return "EndOfFile";
+    case TokenType::KW_ByRef: return "ByRef";
+    case TokenType::KW_ByVal: return "ByVal";
+    case TokenType::KW_Class: return "Class";
+    case TokenType::KW_EndClass: return "EndClass";
+    case TokenType::KW_Public: return "Public";
+    case TokenType::KW_Private: return "Private";
+    case TokenType::KW_Static: return "Static";
+    case TokenType::KW_New: return "New";
+    case TokenType::Dot: return "Dot";
     default: return "Unknown";
-  }
+    }
 }
 
 std::ostream& operator<<(std::ostream& os, const Token& token) {

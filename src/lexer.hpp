@@ -53,6 +53,12 @@ enum class TokenType {
   KW_Continue,
   KW_ByRef,
   KW_ByVal,
+  KW_Class,
+  KW_EndClass,
+  KW_Public,
+  KW_Private,
+  KW_Static,
+  KW_New,
   // Operators
   Plus,
   Minus,

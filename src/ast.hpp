@@ -88,6 +88,21 @@ struct SubDecl {
   std::vector<Parameter> params;
   std::vector<StmtPtr> body;
 };
+struct ClassField {
+  bool is_public;
+  bool is_static;
+  DimStmt decl;
+};
+struct ClassMethod {
+  bool is_public;
+  bool is_static;
+  SubDecl decl;
+};
+struct ClassDecl {
+  std::string name;
+  std::vector<ClassField> fields;
+  std::vector<ClassMethod> methods;
+};
 
 struct ReturnStmt {
   ExprPtr value;
@@ -97,7 +112,7 @@ struct ContinueStmt {};
 
 struct Stmt {
   std::variant<DimStmt, LetStmt, IfStmt, ForStmt, GotoStmt, DoStmt, ExprStmt,
-               LabelStmt, SubDecl, ReturnStmt, BreakStmt, ContinueStmt>
+               LabelStmt, SubDecl, ReturnStmt, BreakStmt, ContinueStmt, ClassDecl>
       data;
   SourceRange range;
   Stmt(auto &&val, SourceRange range) : data(std::forward<decltype(val)>(val)), range(range) {}

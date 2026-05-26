@@ -1,0 +1,12 @@
+class Person
+  public dim foo = 3
+
+  private static dim bar(5)
+
+  static sub foo()
+  end sub
+end class
+
+new Person.foo()
+new Person.bar
+

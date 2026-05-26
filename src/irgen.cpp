@@ -57,144 +57,94 @@ std::expected<void, Error> IrGen::emit(Stmt const &stmt) {
 
       return {};
     },
-    [&](LetStmt const &s) -> std::expected<void, Error> {
-      if (s.dims.empty()) {
-        if (auto res = emit(*s.value); !res)
-          return std::unexpected(res.error());
-
-        auto var = var_register(s.name);
-        prog.push_back({ Instruction::StoreVar, var });
-        return {};
-      } else {
-        for (auto const &id : s.dims) {
-          if (auto res = emit(*id); !res)
+      [&](LetStmt const &s) -> std::expected<void, Error> {
+        if (s.dims.empty()) {
+          if (auto res = emit(*s.value); !res)
             return std::unexpected(res.error());
-        }
-        if (auto res = emit(*s.value); !res)
-          return std::unexpected(res.error());
-        auto var = var_register(s.name);
-        prog.push_back({ Instruction::StoreVar, var });
-        prog.push_back({ Instruction::Extension,
-          static_cast<std::uint16_t>(s.dims.size()) });
-        return {};
-      }
-    },
-    [&](IfStmt const &s) -> std::expected<void, Error> {
-      auto l_else = label_get();
-      auto l_end = label_get();
 
-      if (auto res = emit(*s.condition); !res)
-        return std::unexpected(res.error());
-
-      prog.push_back({ Instruction::JumpFalse, l_else });
-
-      for (auto const &stmt : s.then_branch) {
-        if (auto res = emit(*stmt); !res)
-          return std::unexpected(res.error());
-      }
-      prog.push_back({ Instruction::Goto, l_end });
-
-      prog.push_back({ Instruction::Label, l_else });
-
-      auto else_res = std::visit(
-        Overloaded{
-          [&](std::monostate) -> std::expected<void, Error> { return {}; },
-          [&](
-            std::vector<StmtPtr> const &branch) -> std::expected<void, Error> {
-            for (auto const &stmt : branch) {
-              if (auto res = emit(*stmt); !res)
-                return std::unexpected(res.error());
-            }
-            return {};
-          },
-          [&](StmtPtr const &branch) -> std::expected<void, Error> {
-            if (auto res = emit(*branch); !res)
+          auto var = var_register(s.name);
+          prog.push_back({ Instruction::StoreVar, var });
+          return {};
+        } else {
+          for (auto const &id : s.dims) {
+            if (auto res = emit(*id); !res)
               return std::unexpected(res.error());
-            return {};
-          } },
-        s.else_branch);
-
-      if (!else_res)
-        return std::unexpected(else_res.error());
-
-      prog.push_back({ Instruction::Label, l_end });
-
-      return {};
-    },
-    [&](ForStmt const &s) -> std::expected<void, Error> {
-      auto var = var_register(s.var);
-
-      auto end_val = var_fresh();
-      if (auto res = emit(*s.end); !res)
-        return std::unexpected(res.error());
-      prog.push_back({ Instruction::StoreVar, end_val });
-
-      auto step_val = var_fresh();
-      if (s.step) {
-        if (auto res = emit(*s.step); !res)
-          return std::unexpected(res.error());
-      } else {
-        auto c = const_register({ PeaNumber{ 1 } });
-        prog.push_back({ Instruction::LoadConst, c });
-      }
-      prog.push_back({ Instruction::StoreVar, step_val });
-
-      prog.push_back({ Instruction::DefineVar, var });
-      prog.push_back({ Instruction::Extension, 0 });
-      if (auto res = emit(*s.start); !res)
-        return std::unexpected(res.error());
-      prog.push_back({ Instruction::StoreVar, var });
-
-      auto l_start = label_get();
-      auto l_continue = label_get();
-      auto l_end = label_get();
-      prog.push_back({ Instruction::Label, l_start });
-
-      loop_stack.push_back({ l_continue, l_end });
-      for (auto const &stmt : s.body) {
-        if (auto res = emit(*stmt); !res)
-          return std::unexpected(res.error());
-      }
-      loop_stack.pop_back();
-
-      prog.push_back({ Instruction::Label, l_continue });
-      prog.push_back({ Instruction::LoadVar, var });
-      prog.push_back({ Instruction::LoadVar, step_val });
-      prog.push_back({ Instruction::Add });
-      prog.push_back({ Instruction::StoreVar, var });
-
-      prog.push_back({ Instruction::LoadVar, var });
-      prog.push_back({ Instruction::LoadVar, end_val });
-      prog.push_back({ Instruction::Lte });
-      prog.push_back({ Instruction::JumpTrue, l_start });
-      prog.push_back({ Instruction::Label, l_end });
-
-      return {};
-    },
-    [&](GotoStmt const &s) -> std::expected<void, Error> {
-      auto l = label_register(s.label);
-      prog.push_back({ Instruction::Goto, l });
-      return {};
-    },
-    [&](DoStmt const &s) -> std::expected<void, Error> {
-      if (s.while_at_start) {
-        auto l_start = label_get();
+          }
+          if (auto res = emit(*s.value); !res)
+            return std::unexpected(res.error());
+          auto var = var_register(s.name);
+          prog.push_back({ Instruction::StoreVar, var });
+          prog.push_back({ Instruction::Extension,
+            static_cast<std::uint16_t>(s.dims.size()) });
+          return {};
+        }
+      },
+      [&](IfStmt const &s) -> std::expected<void, Error> {
+        auto l_else = label_get();
         auto l_end = label_get();
-        prog.push_back({ Instruction::Label, l_start });
+
         if (auto res = emit(*s.condition); !res)
           return std::unexpected(res.error());
-        prog.push_back({ Instruction::JumpFalse, l_end });
 
-        loop_stack.push_back({ l_start, l_end });
-        for (auto const &stmt : s.body) {
+        prog.push_back({ Instruction::JumpFalse, l_else });
+
+        for (auto const &stmt : s.then_branch) {
           if (auto res = emit(*stmt); !res)
             return std::unexpected(res.error());
         }
-        loop_stack.pop_back();
+        prog.push_back({ Instruction::Goto, l_end });
 
-        prog.push_back({ Instruction::Goto, l_start });
+        prog.push_back({ Instruction::Label, l_else });
+
+        auto else_res = std::visit(
+          Overloaded{
+            [&](std::monostate) -> std::expected<void, Error> { return {}; },
+            [&](std::vector<StmtPtr> const &branch)
+              -> std::expected<void, Error> {
+              for (auto const &stmt : branch) {
+                if (auto res = emit(*stmt); !res)
+                  return std::unexpected(res.error());
+              }
+              return {};
+            },
+            [&](StmtPtr const &branch) -> std::expected<void, Error> {
+              if (auto res = emit(*branch); !res)
+                return std::unexpected(res.error());
+              return {};
+            } },
+          s.else_branch);
+
+        if (!else_res)
+          return std::unexpected(else_res.error());
+
         prog.push_back({ Instruction::Label, l_end });
-      } else {
+
+        return {};
+      },
+      [&](ForStmt const &s) -> std::expected<void, Error> {
+        auto var = var_register(s.var);
+
+        auto end_val = var_fresh();
+        if (auto res = emit(*s.end); !res)
+          return std::unexpected(res.error());
+        prog.push_back({ Instruction::StoreVar, end_val });
+
+        auto step_val = var_fresh();
+        if (s.step) {
+          if (auto res = emit(*s.step); !res)
+            return std::unexpected(res.error());
+        } else {
+          auto c = const_register({ PeaNumber{ 1 } });
+          prog.push_back({ Instruction::LoadConst, c });
+        }
+        prog.push_back({ Instruction::StoreVar, step_val });
+
+        prog.push_back({ Instruction::DefineVar, var });
+        prog.push_back({ Instruction::Extension, 0 });
+        if (auto res = emit(*s.start); !res)
+          return std::unexpected(res.error());
+        prog.push_back({ Instruction::StoreVar, var });
+
         auto l_start = label_get();
         auto l_continue = label_get();
         auto l_end = label_get();
@@ -208,80 +158,133 @@ std::expected<void, Error> IrGen::emit(Stmt const &stmt) {
         loop_stack.pop_back();
 
         prog.push_back({ Instruction::Label, l_continue });
-        if (auto res = emit(*s.condition); !res)
-          return std::unexpected(res.error());
+        prog.push_back({ Instruction::LoadVar, var });
+        prog.push_back({ Instruction::LoadVar, step_val });
+        prog.push_back({ Instruction::Add });
+        prog.push_back({ Instruction::StoreVar, var });
+
+        prog.push_back({ Instruction::LoadVar, var });
+        prog.push_back({ Instruction::LoadVar, end_val });
+        prog.push_back({ Instruction::Lte });
         prog.push_back({ Instruction::JumpTrue, l_start });
         prog.push_back({ Instruction::Label, l_end });
-      }
-      return {};
-    },
-    [&](ExprStmt const &s) -> std::expected<void, Error> {
-      if (auto res = emit(*s.expr); !res)
-        return std::unexpected(res.error());
-      prog.push_back({ Instruction::Pop });
-      return {};
-    },
-    [&](LabelStmt const &s) -> std::expected<void, Error> {
-      auto l = label_register(s.name);
-      prog.push_back({ Instruction::Label, l });
-      return {};
-    },
-    [&](SubDecl const &s) -> std::expected<void, Error> {
-      std::uint16_t id = func_next++;
-      func_names.push_back(s.name);
-      func_bodies.push_back({});
 
-      auto c = const_register(PeaValue{ PeaFuncPtr{ id } });
-      prog.push_back({ Instruction::LoadConst, c });
-      auto v = var_register(s.name);
-      prog.push_back({ Instruction::StoreVar, v });
+        return {};
+      },
+      [&](GotoStmt const &s) -> std::expected<void, Error> {
+        auto l = label_register(s.label);
+        prog.push_back({ Instruction::Goto, l });
+        return {};
+      },
+      [&](DoStmt const &s) -> std::expected<void, Error> {
+        if (s.while_at_start) {
+          auto l_start = label_get();
+          auto l_end = label_get();
+          prog.push_back({ Instruction::Label, l_start });
+          if (auto res = emit(*s.condition); !res)
+            return std::unexpected(res.error());
+          prog.push_back({ Instruction::JumpFalse, l_end });
 
-      std::vector<Instruction> main_prog = std::move(prog);
-      prog.clear();
+          loop_stack.push_back({ l_start, l_end });
+          for (auto const &stmt : s.body) {
+            if (auto res = emit(*stmt); !res)
+              return std::unexpected(res.error());
+          }
+          loop_stack.pop_back();
 
-      for (auto const &param : s.params | std::ranges::views::reverse) {
-        auto var = var_register(param.name);
-        prog.push_back({ Instruction::DefineVar, var });
-        prog.push_back({ Instruction::Extension, 0 });
-        if (!param.is_ref) {
-          prog.push_back({ Instruction::Deref, var });
+          prog.push_back({ Instruction::Goto, l_start });
+          prog.push_back({ Instruction::Label, l_end });
+        } else {
+          auto l_start = label_get();
+          auto l_continue = label_get();
+          auto l_end = label_get();
+          prog.push_back({ Instruction::Label, l_start });
+
+          loop_stack.push_back({ l_continue, l_end });
+          for (auto const &stmt : s.body) {
+            if (auto res = emit(*stmt); !res)
+              return std::unexpected(res.error());
+          }
+          loop_stack.pop_back();
+
+          prog.push_back({ Instruction::Label, l_continue });
+          if (auto res = emit(*s.condition); !res)
+            return std::unexpected(res.error());
+          prog.push_back({ Instruction::JumpTrue, l_start });
+          prog.push_back({ Instruction::Label, l_end });
         }
-        prog.push_back({ Instruction::StoreVar, var });
-      }
-
-      prog.push_back({ Instruction::Pop });
-
-      for (auto const &stmt : s.body) {
-        if (auto res = emit(*stmt); !res) {
-          prog = std::move(main_prog);
+        return {};
+      },
+      [&](ExprStmt const &s) -> std::expected<void, Error> {
+        if (auto res = emit(*s.expr); !res)
           return std::unexpected(res.error());
+        prog.push_back({ Instruction::Pop });
+        return {};
+      },
+      [&](LabelStmt const &s) -> std::expected<void, Error> {
+        auto l = label_register(s.name);
+        prog.push_back({ Instruction::Label, l });
+        return {};
+      },
+      [&](SubDecl const &s) -> std::expected<void, Error> {
+        std::uint16_t id = func_next++;
+        func_names.push_back(s.name);
+        func_bodies.push_back({});
+
+        auto c = const_register(PeaValue{ PeaFuncPtr{ id } });
+        prog.push_back({ Instruction::LoadConst, c });
+        auto v = var_register(s.name);
+        prog.push_back({ Instruction::StoreVar, v });
+
+        std::vector<Instruction> main_prog = std::move(prog);
+        prog.clear();
+
+        for (auto const &param : s.params | std::ranges::views::reverse) {
+          auto var = var_register(param.name);
+          prog.push_back({ Instruction::DefineVar, var });
+          prog.push_back({ Instruction::Extension, 0 });
+          if (!param.is_ref) {
+            prog.push_back({ Instruction::Deref, var });
+          }
+          prog.push_back({ Instruction::StoreVar, var });
         }
+
+        prog.push_back({ Instruction::Pop });
+
+        for (auto const &stmt : s.body) {
+          if (auto res = emit(*stmt); !res) {
+            prog = std::move(main_prog);
+            return std::unexpected(res.error());
+          }
+        }
+
+        prog.push_back({ Instruction::Return, 0 });
+
+        func_bodies[id] = std::move(prog);
+        prog = std::move(main_prog);
+
+        return {};
+      },
+      [&](ReturnStmt const &s) -> std::expected<void, Error> {
+        if (s.value) {
+          if (auto res = emit(*s.value); !res)
+            return std::unexpected(res.error());
+        }
+        prog.push_back(
+          { Instruction::Return, static_cast<uint16_t>(s.value ? 1 : 0) });
+        return {};
+      },
+      [&](BreakStmt const &s) -> std::expected<void, Error> {
+        prog.push_back({ Instruction::Goto, loop_stack.back().break_lbl });
+        return {};
+      },
+      [&](ContinueStmt const &s) -> std::expected<void, Error> {
+        prog.push_back({ Instruction::Goto, loop_stack.back().continue_lbl });
+        return {};
+      },
+      [&](ClassDecl const &s) -> std::expected<void, Error> {
+	return {};
       }
-
-      prog.push_back({ Instruction::Return, 0 });
-
-      func_bodies[id] = std::move(prog);
-      prog = std::move(main_prog);
-
-      return {};
-    },
-    [&](ReturnStmt const &s) -> std::expected<void, Error> {
-      if (s.value) {
-        if (auto res = emit(*s.value); !res)
-          return std::unexpected(res.error());
-      }
-      prog.push_back(
-        { Instruction::Return, static_cast<uint16_t>(s.value ? 1 : 0) });
-      return {};
-    },
-    [&](BreakStmt const &s) -> std::expected<void, Error> {
-      prog.push_back({ Instruction::Goto, loop_stack.back().break_lbl });
-      return {};
-    },
-    [&](ContinueStmt const &s) -> std::expected<void, Error> {
-      prog.push_back({ Instruction::Goto, loop_stack.back().continue_lbl });
-      return {};
-    }
   };
   return std::visit(vtor, stmt.data);
 }

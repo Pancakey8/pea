@@ -305,6 +305,32 @@ struct StmtPrinter {
   void operator()(const ContinueStmt &s) {
     os << "{\"type\":\"ContinueStmt\"}";
   }
+
+  void operator()(const ClassDecl &s) {
+    os << "{\"type\":\"ClassDecl\",\"name\":";
+    op_json_str(os, s.name);
+    os << ",\"fields\":[";
+    for (size_t i = 0; i < s.fields.size(); ++i) {
+      os << "{\"is_public\":" << (s.fields[i].is_public ? "true" : "false")
+         << ",\"is_static\":" << (s.fields[i].is_static ? "true" : "false")
+         << ",\"decl\":";
+      (*this)(s.fields[i].decl);
+      os << "}";
+      if (i < s.fields.size() - 1)
+        os << ",";
+    }
+    os << "],\"methods\":[";
+    for (size_t i = 0; i < s.methods.size(); ++i) {
+      os << "{\"is_public\":" << (s.methods[i].is_public ? "true" : "false")
+         << ",\"is_static\":" << (s.methods[i].is_static ? "true" : "false")
+         << ",\"decl\":";
+      (*this)(s.methods[i].decl);
+      os << "}";
+      if (i < s.methods.size() - 1)
+        os << ",";
+    }
+    os << "]}";
+  }
 };
 
 std::ostream &operator<<(std::ostream &os, const Expr &expr) {

@@ -1,4 +1,5 @@
 #include "parser.hpp"
+#include "ast.hpp"
 #include "lexer.hpp"
 #include <variant>
 
@@ -116,6 +117,16 @@ std::expected<ExprPtr, Error> Parser::parse_prefix() {
     return std::make_unique<Expr>(UnaryOp{ op, std::move(*operand) },
       SourceRange{ start_t.start, (*operand)->range.end });
   }
+  if (current.type == TokenType::KW_New) {
+    Token start_t = current;
+    TokenType op = current.type;
+    advance();
+    auto operand = parse_expression(100);
+    if (!operand)
+      return std::unexpected(operand.error());
+    return std::make_unique<Expr>(UnaryOp{ op, std::move(*operand) },
+      SourceRange{ start_t.start, (*operand)->range.end });
+  }
   if (current.type == TokenType::Plus || current.type == TokenType::Minus) {
     Token start_t = current;
     TokenType op = current.type;
@@ -220,6 +231,8 @@ std::expected<StmtPtr, Error> Parser::parse_statement() {
     return parse_do();
   if (current.type == TokenType::KW_Sub)
     return parse_sub();
+  if (current.type == TokenType::KW_Class)
+    return parse_classdecl();
   if (current.type == TokenType::KW_Return) {
     if (!in_subroutine)
       return std::unexpected(
@@ -689,6 +702,66 @@ std::expected<StmtPtr, Error> Parser::parse_continue() {
   }
   return std::make_unique<Stmt>(
     ContinueStmt{}, SourceRange{ start_t.start, last_t.end });
+}
+
+std::expected<StmtPtr, Error> Parser::parse_classdecl() {
+  Token start_t = current;
+  advance(); // class
+  Token last_t = current;
+  std::string name = current.text;
+  if (!consume(TokenType::Ident))
+    return std::unexpected(
+      Error{ "Expected class name", current.start, current.end });
+
+  if (!consume(TokenType::EOL))
+    return std::unexpected(Error{ "Expected EOL", current.start, current.end });
+  while (current.type == TokenType::EOL) {
+    last_t = current;
+    advance();
+  }
+
+  std::vector<ClassField> fields;
+  std::vector<ClassMethod> methods;
+  while (!consume(TokenType::KW_EndClass)) {
+    bool is_public{ false };
+    bool is_static{ false };
+    if (consume(TokenType::KW_Public)) {
+      is_public = true;
+    } else if (consume(TokenType::KW_Private)) {
+    }
+
+    if (consume(TokenType::KW_Static))
+      is_static = true;
+
+    if (current.type == TokenType::KW_Dim) {
+      auto s = parse_dim();
+      if (!s)
+        return s;
+      fields.push_back(ClassField{
+        is_public, is_static, std::move(std::get<DimStmt>((*s)->data)) });
+    } else if (current.type == TokenType::KW_Sub) {
+      auto s = parse_sub();
+      if (!s)
+        return s;
+      methods.push_back(ClassMethod{
+        is_public, is_static, std::move(std::get<SubDecl>((*s)->data)) });
+    } else {
+      return std::unexpected(Error{"Expected class field or method", current.start, current.end});
+    }
+
+    last_t = current;
+  }
+
+  if (!consume(TokenType::EOL))
+    return std::unexpected(Error{ "Expected EOL", current.start, current.end });
+  while (current.type == TokenType::EOL) {
+    last_t = current;
+    advance();
+  }
+
+  return std::make_unique<Stmt>(
+    ClassDecl{ name, std::move(fields), std::move(methods) },
+    SourceRange{ start_t.start, last_t.end });
 }
 
 std::expected<std::vector<StmtPtr>, Error> Parser::parse_statements(
