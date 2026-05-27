@@ -162,7 +162,7 @@ std::optional<std::size_t> PeaNaN::get_method(Vm &vm, std::uint16_t id) const {
           table.static_methods.end(),
           [see_privates, id](
             auto x) { return (see_privates || x.is_public) && x.name == id; });
-      it != table.methods.end()) {
+      it != table.static_methods.end()) {
       return it->sub;
     }
   }
@@ -596,6 +596,7 @@ void Vm::run(std::optional<std::size_t> until) {
       auto meth = read<std::uint16_t>();
       auto argc = read<std::uint16_t>();
       auto self = stack[stack.size() - argc];
+
       if (auto meth_off = self.get_method(*this, meth)) {
         dispatch_call(PeaNaN::of_func(*meth_off), argc, self.what());
       } else {
@@ -619,7 +620,7 @@ void Vm::run(std::optional<std::size_t> until) {
           auto num = stack.back().coerce_num(*this);
           if (!num)
             return error("Array dimension must be a number");
-          if (num < 0)
+          if (num <= 0)
             return error("Array dimension must be > 0");
           dims[dim - i - 1] = *num;
           total *= *num;

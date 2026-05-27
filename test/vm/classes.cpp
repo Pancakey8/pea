@@ -107,4 +107,40 @@ void test_classes() {
     expect(arr->elems[0].coerce_str(*vm) == "Foo(10)");
     expect(arr->elems[1].coerce_str(*vm) == "Foo(20)");
   }
+  {
+    vm = vm_run("dim res(2)\n"
+                "dim rep = 1\n"
+                "\n"
+                "label:\n"
+                "dim x = rep + 1\n"
+                "\n"
+                "class Foo\n"
+                "  dim arr(x)\n"
+                "  \n"
+                "  public static sub make()\n"
+                "    dim f = new Foo\n"
+                "    for i = 1 to x\n"
+                "      let (f.arr)(i) = i\n"
+                "    end for\n"
+                "    return f\n"
+                "  end sub\n"
+                "\n"
+                "  public sub toString()\n"
+                "    return \"Foo\" & this.arr\n"
+                "  end sub\n"
+                "end class\n"
+                "\n"
+                "let res(rep) = Foo.make()\n"
+                "\n"
+                "if rep = 1 then\n"
+                "  let rep = 2\n"
+                "  goto label\n"
+                "end if\n"
+                "\n");
+    expect(vm->variables[0].what() ==
+           static_cast<std::uint16_t>(InternalObj::Array));
+    auto arr = reinterpret_cast<PeaObjArray *>(vm->variables[0].canon().obj());
+    expect(arr->elems[0].coerce_str(*vm) == "Foo[1, 2]");
+    expect(arr->elems[1].coerce_str(*vm) == "Foo[1, 2, 3]");
+  }
 }

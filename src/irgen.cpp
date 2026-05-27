@@ -24,8 +24,7 @@ std::expected<ProgramIr, Error> IrGen::generate(Program const &prog) {
     std::move(func_names),
     std::move(func_bodies),
     std::move(class_names),
-    std::move(classes)
-  };
+    std::move(classes) };
 }
 
 std::expected<void, Error> IrGen::emit(Program const &prog) {
@@ -53,8 +52,8 @@ std::expected<void, Error> IrGen::emit(Stmt const &stmt) {
       if (s.init) {
         if (auto res = emit(*s.init.value()); !res)
           return std::unexpected(res.error());
-	prog.push_back({ Instruction::Deref });
-	prog.push_back({ Instruction::LoadVar, var });
+        prog.push_back({ Instruction::Deref });
+        prog.push_back({ Instruction::LoadVar, var });
         prog.push_back({ Instruction::StoreVar });
       }
 
@@ -267,18 +266,31 @@ std::expected<void, Error> IrGen::emit(Stmt const &stmt) {
       prog.push_back({ Instruction::LoadVar, name });
       prog.push_back({ Instruction::StoreVar });
 
+      auto fields_temp = var_fresh();
       for (auto const &field : s.fields) {
-        if (!field.decl.dims.empty())
-          assert(false && "TODO: Arrays in classes");
         ClassTable::Field fld{};
         fld.name = var_register(field.decl.name);
         fld.is_public = field.is_public;
         fld.is_static = field.is_static;
+
+        if (!field.decl.dims.empty()) {
+          for (auto const &dim : field.decl.dims)
+            if (auto res = emit(*dim); !res)
+              return res;
+          prog.push_back({ Instruction::DefineVar, fields_temp });
+          prog.push_back({ Instruction::Extension,
+            static_cast<std::uint16_t>(field.decl.dims.size()) });
+	  prog.push_back({ Instruction::LoadVar, fields_temp });
+	  prog.push_back({ Instruction::Deref });
+	  prog.push_back({ Instruction::StoreVField, id });
+          prog.push_back({ Instruction::Extension, fld.name });
+        }
+
         if (field.decl.init) {
           auto res = emit(**field.decl.init);
           if (!res)
             return res;
-	  prog.push_back({ Instruction::Deref });
+          prog.push_back({ Instruction::Deref });
           prog.push_back({ Instruction::StoreVField, id });
           prog.push_back({ Instruction::Extension, fld.name });
         }
@@ -441,7 +453,7 @@ std::expected<void, Error> IrGen::emit(Expr const &expr) {
           return std::unexpected(res.error());
       }
       prog.push_back(
-		     { Instruction::Call, static_cast<std::uint16_t>(e.args.size()) });
+        { Instruction::Call, static_cast<std::uint16_t>(e.args.size()) });
       return {};
     }
   };
@@ -683,14 +695,13 @@ void print_instr(std::ostream &os, It &it, ProgramIr const &ir) {
     os << ", " << count.data << "\n";
   } break;
   case Instruction::StoreVField: {
-    auto name = std::find_if(ir.vars.begin(),
-      ir.vars.end(),
-      [&instr](auto const &p) { return p.second == instr.data; });
+    auto name = ir.class_names[instr.data];
     auto fld = *(++it);
     auto fld_name = std::find_if(ir.vars.begin(),
       ir.vars.end(),
       [&fld](auto const &p) { return p.second == fld.data; });
-    os << "STORE_VFIELD " << instr.data << "[" << name->first << "], " << fld.data << "[" << fld_name->first << "]\n";
+    os << "STORE_VFIELD " << instr.data << "[" << name << "], "
+       << fld.data << "[" << fld_name->first << "]\n";
   } break;
   case Instruction::Extension:
     break;

@@ -1,23 +1,31 @@
-sub foo(byref a)
-  if a < 0 then
-    return
-  end if
-  println("a = " & a)
-  let a = a - 1
-  foo(a)
-end sub
+dim res(2)
+dim rep = 1
 
-foo(10)
+label:
+dim x = rep + 1
 
-sub refs(byref x)
-  return x
-end sub
+class Foo
+  dim arr(x)
+  
+  public static sub make()
+    dim f = new Foo
+    for i = 1 to x
+      let (f.arr)(i) = i
+    end for
+    return f
+  end sub
 
-sub bar()
-  dim x = 10
-  let refs(x) = 5
-  println(x)
-end sub
+  public sub toString()
+    return "Foo" & this.arr
+  end sub
+end class
 
-bar()
+let res(rep) = Foo.make()
+
+if rep = 1 then
+  let rep = 2
+  goto label
+end if
+
+println(res)
 
