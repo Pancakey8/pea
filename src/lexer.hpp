@@ -107,6 +107,7 @@ private:
   int col = 1;
 
   void skip_whitespace();
+  std::expected<void, Error> read_comment();
   std::expected<Token, Error> read_number();
   std::expected<Token, Error> read_string();
   std::expected<Token, Error> read_char();

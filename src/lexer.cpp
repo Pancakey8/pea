@@ -33,8 +33,19 @@ std::expected<Token, Error> Lexer::next_token() {
     return read_number();
   if (c == '"')
     return read_string();
-  if (c == '\'')
-    return read_char();
+  if (c == '\'') {
+    auto start_pos = pos;
+    auto start_col = col;
+    auto chr = read_char();
+    if (!chr) {
+      pos = start_pos;
+      col = start_col;
+      auto cmt = read_comment();
+      if (!cmt) return chr;
+      return next_token();
+    }
+    return chr;
+  }
   if (std::isalpha(c) || c == '_')
     return read_ident_or_keyword();
 
@@ -95,6 +106,19 @@ std::expected<Token, Error> Lexer::read_string() {
   pos++;
   col++; // skip "
   return Token{TokenType::String, result, 0, 0, {line, start_col}, {line, col}};
+}
+
+std::expected<void, Error> Lexer::read_comment() {
+  int start_col = col;
+  pos++;
+  col++;
+
+  while (pos < source.size() && source[pos] != '\n') {
+    pos++;
+    col++;
+  }
+
+  return {};
 }
 
 std::expected<Token, Error> Lexer::read_char() {
