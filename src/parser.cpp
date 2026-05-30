@@ -429,13 +429,16 @@ std::expected<ElseBranch, Error> Parser::parse_else_branch() {
       auto else_stmts = parse_statements({ TokenType::KW_EndIf });
       if (!else_stmts)
         return std::unexpected(else_stmts.error());
-      if (!consume(TokenType::KW_EndIf))
+      if (!consume(TokenType::KW_EndIf)) {
+	missing_end = true;
         return std::unexpected(
           Error{ "Expected 'end if'", current.start, current.end });
+      }
       return std::move(*else_stmts);
     }
   }
 
+  missing_end = true;
   return std::unexpected(
     Error{ "Expected 'else' or 'end if'", current.start, current.end });
 }
@@ -479,9 +482,11 @@ std::expected<StmtPtr, Error> Parser::parse_for() {
 
   if (!body)
     return std::unexpected(body.error());
-  if (!consume(TokenType::KW_EndFor))
+  if (!consume(TokenType::KW_EndFor)) {
+    missing_end = true;
     return std::unexpected(
       Error{ "Expected 'end for'", current.start, current.end });
+  }
   Token last_t = last;
   if (!consume(TokenType::EOL))
     return std::unexpected(Error{ "Expected EOL", current.start, current.end });
@@ -540,17 +545,21 @@ std::expected<StmtPtr, Error> Parser::parse_do() {
     if (!body_parse)
       return std::unexpected(body_parse.error());
     body = std::move(*body_parse);
-    if (!consume(TokenType::KW_Loop))
+    if (!consume(TokenType::KW_Loop)) {
+      missing_end = true;
       return std::unexpected(
         Error{ "Expected 'loop'", current.start, current.end });
+    }
   } else {
     auto body_parse = parse_statements({ TokenType::KW_Loop });
     if (!body_parse)
       return std::unexpected(body_parse.error());
     body = std::move(*body_parse);
-    if (!consume(TokenType::KW_Loop))
+    if (!consume(TokenType::KW_Loop)) {
+      missing_end = true;
       return std::unexpected(
         Error{ "Expected 'loop'", current.start, current.end });
+    }
     if (!consume(TokenType::KW_While))
       return std::unexpected(
         Error{ "Expected 'while'", current.start, current.end });
@@ -618,9 +627,11 @@ std::expected<StmtPtr, Error> Parser::parse_sub() {
   if (!body)
     return std::unexpected(body.error());
 
-  if (!consume(TokenType::KW_EndSub))
+  if (!consume(TokenType::KW_EndSub)) {
+    missing_end = true;
     return std::unexpected(
       Error{ "Expected 'end sub'", current.start, current.end });
+  }
 
   Token last_t = current;
   if (!consume(TokenType::EOL))
@@ -726,6 +737,9 @@ std::expected<StmtPtr, Error> Parser::parse_classdecl() {
       methods.push_back(ClassMethod{
         is_public, is_static, std::move(std::get<SubDecl>((*s)->data)) });
     } else {
+      if (current.type == TokenType::EOL || current.type == TokenType::EndOfFile) {
+	missing_end = true;
+      }
       return std::unexpected(Error{"Expected class field or method", current.start, current.end});
     }
 
@@ -781,3 +795,8 @@ std::expected<Program, Error> Parser::parse() {
   }
   return Program{ std::move(*stmts), range };
 }
+
+bool Parser::is_continuing() {
+  return missing_end;
+}
+

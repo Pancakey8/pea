@@ -4,82 +4,74 @@
 #include "lexer.hpp"
 #include "parser.hpp"
 #include "vm.hpp"
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <print>
+#include <readline/history.h>
+#include <readline/readline.h>
 #include <sstream>
 #include <string>
 
+void print_error(Error const &err) {
+  std::println("Error {}:{} -> {}:{}: {}",
+    err.range.start.line,
+    err.range.start.col,
+    err.range.end.line,
+    err.range.end.col,
+    err.message);
+}
+
 int main() {
-  std::ifstream file{ "./test.pea" };
-  std::stringstream file_ss{};
-  file_ss << file.rdbuf();
+  std::println("Pea BASIC Interactive Shell");
 
-  std::string input{ file_ss.str() };
-  std::println("Input: |{}|", input);
+  std::string collected{};
+  char const *prompt_normal = "Pea> ";
+  char const *prompt_continue = "...> ";
 
-  {
-    Lexer l{ input };
-    auto t = l.next_token();
-    do {
-      std::cout << *t << '\n';
-    } while ((t = l.next_token()) && t->type != TokenType::EndOfFile);
-  }
+  while (true) {
+    char *raw_input = readline(collected.empty() ? prompt_normal : prompt_continue);
 
-  Lexer lexer{ input };
-  Parser p{ lexer };
+    if (!raw_input)
+      break;
 
-  auto prog = p.parse();
-  if (!prog) {
-    std::println("Error {}:{} to {}:{}: {}",
-      prog.error().range.start.line,
-      prog.error().range.start.col,
-      prog.error().range.end.line,
-      prog.error().range.end.col,
-      prog.error().message);
-    return 1;
-  }
+    std::string input{std::move(collected)};
+    input += std::string{raw_input};
+    std::free(raw_input);
 
-  std::cout << *prog << '\n';
+    if (input.empty())
+      break;
 
-  IrGen gen{};
-  auto ir = gen.generate(*prog);
-  if (!ir) {
-    std::println("Error {}:{} to {}:{}: {}",
-      ir.error().range.start.line,
-      ir.error().range.start.col,
-      ir.error().range.end.line,
-      ir.error().range.end.col,
-      ir.error().message);
-    return 1;
-  }
+    add_history(input.c_str());
 
-  std::cout << *ir << '\n';
+    input += '\n';
 
-  BytecodeEmitter emitter{ *ir };
-  std::vector<std::uint8_t> bytecode{};
-  emitter.emit(bytecode);
-
-  for (std::size_t base = 0; base < bytecode.size(); base += 8) {
-    for (std::size_t col = 0; col < 8; ++col) {
-      if (base + col >= bytecode.size())
-        std::print("00 ");
-      else {
-        std::print("{:02X} ", bytecode[base + col]);
+    Lexer lexer{ std::move(input) };
+    Parser parser{ lexer };
+    auto prog = parser.parse();
+    if (!prog) {
+      if (parser.is_continuing()) {
+	collected = std::move(input);
+	continue;
       }
+      print_error(prog.error());
+      break;
     }
-    std::print("| ");
-    for (std::size_t col = 0; col < 8; ++col) {
-      if (base + col >= bytecode.size())
-        std::print(". ");
-      else if (bytecode[base + col] >= 32 && bytecode[base + col] <= 127)
-        std::print("{:c} ", bytecode[base + col]);
-      else std::print(". ");
-    }
-    std::print("\n");
-  }
 
-  Vm vm{bytecode};
-  vm.run();
-  std::println("Finished");
+    collected = std::string{};
+
+    IrGen irgen{};
+    auto ir = irgen.generate(*prog);
+    if (!ir) {
+      print_error(ir.error());
+      break;
+    }
+
+    BytecodeEmitter emitter{*ir};
+    std::vector<std::uint8_t> bytes{};
+    emitter.emit(bytes);
+
+    Vm vm{bytes};
+    vm.run();
+  }
 }

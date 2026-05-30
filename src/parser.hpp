@@ -8,6 +8,7 @@ class Parser {
 public:
   explicit Parser(Lexer &lexer);
   std::expected<Program, Error> parse();
+  bool is_continuing();
 
 private:
   Lexer &lexer;
@@ -17,6 +18,7 @@ private:
 
   bool in_subroutine = false;
   bool in_loop = false;
+  bool missing_end = false;
 
   void advance();
   Token peek();
