@@ -4,6 +4,7 @@
 #include <cassert>
 #include <cstddef>
 #include <format>
+#include <print>
 #include <iostream>
 #include <ranges>
 #include <utility>
@@ -17,14 +18,21 @@ std::expected<ProgramIr, Error> IrGen::generate(Program const &prog) {
   if (auto res = emit(prog); !res)
     return std::unexpected(res.error());
 
-  return ProgramIr{ std::move(this->prog),
+  auto next = classes.size();
+
+  ProgramIr ir{ std::move(this->prog),
     variables,
     consts,
     labels,
     func_names,
     func_bodies,
-    class_names,
-    classes };
+    std::move(class_names),
+    std::move(classes),
+    class_start };
+
+  class_start = next;
+  
+  return ir;
 }
 
 std::expected<void, Error> IrGen::emit(Program const &prog) {
@@ -256,9 +264,9 @@ std::expected<void, Error> IrGen::emit(Stmt const &stmt) {
     },
     [&](ClassDecl const &s) -> std::expected<void, Error> {
       ClassTable table{};
-      auto id = class_next++;
       class_names.push_back(s.name);
       classes.push_back({});
+      std::uint16_t id = classes.size() - 1;
 
       auto name = var_register(s.name);
       auto c = const_register(PeaValue{ PeaClassPtr{ id } });

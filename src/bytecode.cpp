@@ -45,7 +45,10 @@ void BytecodeEmitter::emit(
   emit_consts(prog, out);
   emit_subs(prog, out);
   emit_classes(prog, out);
-  write_le(out, 1, out.size() - 1); // entire header - 9 (for prefix instruction) + 8 (for instr length)
+  write_le(out,
+    1,
+    out.size() -
+      1); // entire header - 9 (for prefix instruction) + 8 (for instr length)
   emit_body(prog.prog, out);
   resolve_ids(prog, out);
   global_offset += out.size();
@@ -277,7 +280,8 @@ void BytecodeEmitter::emit_classes(
   auto table_size = head_start;
   auto class_count = table_size + sizeof(std::size_t);
 
-  for (auto const table : prog.classes) {
+  for (auto const [i, table] : prog.classes | std::ranges::views::enumerate) {
+    emit_le(out, out.end(), static_cast<std::uint16_t>(prog.class_start + i));
     emit_le(out, out.end(), static_cast<std::size_t>(table.fields.size()));
     for (auto const field : table.fields) {
       emit_le(out, out.end(), static_cast<std::uint8_t>(field.is_public));
@@ -318,9 +322,9 @@ void BytecodeEmitter::resolve_ids(
 
   for (auto const &res : resolve_labels) {
     std::uint16_t id = (bytes[res + 1] << 8) | bytes[res];
-    auto off =
-      static_cast<std::int32_t>(static_cast<std::ptrdiff_t>(labels[id]) -
-                                static_cast<std::ptrdiff_t>(global_offset + res) + 1);
+    auto off = static_cast<std::int32_t>(
+      static_cast<std::ptrdiff_t>(labels[id]) -
+      static_cast<std::ptrdiff_t>(global_offset + res) + 1);
     write_le(bytes, res, static_cast<std::int32_t>(off));
   }
 

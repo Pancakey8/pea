@@ -97,6 +97,7 @@ struct ProgramIr {
   std::vector<std::vector<Instruction>> func_bodies;
   std::vector<std::string> class_names;
   std::vector<ClassTable> classes;
+  std::uint16_t class_start;
 };
 
 std::ostream &operator<<(std::ostream &os, ProgramIr const &ir);
@@ -161,8 +162,7 @@ private:
 
   std::vector<std::string> class_names{};
   std::vector<ClassTable> classes{};
-  std::uint16_t class_next{};
-  std::uint16_t class_register(std::string lbl);
+  std::uint16_t class_start{};
 
   std::expected<void, Error> sub_emit(SubDecl const &s, std::uint16_t id);
 };

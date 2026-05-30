@@ -795,6 +795,7 @@ void Vm::boot() {
   auto class_count = read<std::uint16_t>();
   for (std::uint16_t i = 0; i < class_count; ++i) {
     PeaVTable table{};
+    auto id = read<std::uint16_t>();
     auto fields = read<std::size_t>();
     for (std::size_t j = 0; j < fields; ++j) {
       bool is_public = read<std::uint8_t>();
@@ -821,7 +822,7 @@ void Vm::boot() {
         table.methods.push_back(PeaVTable::Method{ is_public, name, sub });
       }
     }
-    vtables[i] = std::move(table);
+    vtables[id] = std::move(table);
   }
   auto body = read<std::size_t>();
 }
