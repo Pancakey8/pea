@@ -41,22 +41,23 @@ enum class OpCode : std::uint8_t {
   Return,
   Construct,
   StoreVField,
+  ProgPrefix = 0xFE,
   Extension = 0xFF
 };
 
 class BytecodeEmitter {
 public:
-  explicit BytecodeEmitter(ProgramIr const &prog);
-
-  void emit(std::vector<std::uint8_t> &out);
+  void emit(ProgramIr const &prog, std::vector<std::uint8_t> &out);
 
 private:
-  void emit_consts(std::vector<std::uint8_t> &out);
-  void emit_subs(std::vector<std::uint8_t> &out);
-  void emit_classes(std::vector<std::uint8_t> &out);
+  void emit_consts(ProgramIr const &prog, std::vector<std::uint8_t> &out);
+  void emit_subs(ProgramIr const &prog, std::vector<std::uint8_t> &out);
+  void emit_classes(ProgramIr const &prog, std::vector<std::uint8_t> &out);
   void emit_body(
     std::vector<Instruction> const &instrs, std::vector<std::uint8_t> &out);
-  void resolve_ids(std::vector<std::uint8_t> &bytes);
+  void resolve_ids(ProgramIr const &prog, std::vector<std::uint8_t> &bytes);
+
+  std::size_t global_offset{};
 
   std::vector<std::size_t> consts{};
   std::vector<std::size_t> resolve_consts{};
@@ -66,6 +67,4 @@ private:
 
   std::vector<std::size_t> labels{};
   std::vector<std::size_t> resolve_labels{};
-
-  ProgramIr const &prog;
 };

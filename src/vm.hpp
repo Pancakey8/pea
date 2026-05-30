@@ -195,13 +195,16 @@ class Vm {
 public:
   explicit Vm(std::vector<std::uint8_t> bytes);
 
+  void on_error(std::function<void(Error)> on_error);
+
+  void append(std::vector<std::uint8_t> bytes);
+  void boot();
   void run(std::optional<std::size_t> until = {});
 
 private:
   friend class BuiltinFns;
   friend class PeaNaN;
 
-  void move_start();
   void error(std::string_view const str);
   template <typename Int> Int read();
   template <typename Int> Int read_at(std::size_t pos);
@@ -251,4 +254,6 @@ private:
   std::size_t util_on{0};
 
   std::size_t ip{};
+
+  std::function<void(Error)> signal_error;
 };

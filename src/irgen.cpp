@@ -18,13 +18,13 @@ std::expected<ProgramIr, Error> IrGen::generate(Program const &prog) {
     return std::unexpected(res.error());
 
   return ProgramIr{ std::move(this->prog),
-    std::move(variables),
-    std::move(consts),
-    std::move(labels),
-    std::move(func_names),
-    std::move(func_bodies),
-    std::move(class_names),
-    std::move(classes) };
+    variables,
+    consts,
+    labels,
+    func_names,
+    func_bodies,
+    class_names,
+    classes };
 }
 
 std::expected<void, Error> IrGen::emit(Program const &prog) {
@@ -280,9 +280,9 @@ std::expected<void, Error> IrGen::emit(Stmt const &stmt) {
           prog.push_back({ Instruction::DefineVar, fields_temp });
           prog.push_back({ Instruction::Extension,
             static_cast<std::uint16_t>(field.decl.dims.size()) });
-	  prog.push_back({ Instruction::LoadVar, fields_temp });
-	  prog.push_back({ Instruction::Deref });
-	  prog.push_back({ Instruction::StoreVField, id });
+          prog.push_back({ Instruction::LoadVar, fields_temp });
+          prog.push_back({ Instruction::Deref });
+          prog.push_back({ Instruction::StoreVField, id });
           prog.push_back({ Instruction::Extension, fld.name });
         }
 
@@ -700,8 +700,8 @@ void print_instr(std::ostream &os, It &it, ProgramIr const &ir) {
     auto fld_name = std::find_if(ir.vars.begin(),
       ir.vars.end(),
       [&fld](auto const &p) { return p.second == fld.data; });
-    os << "STORE_VFIELD " << instr.data << "[" << name << "], "
-       << fld.data << "[" << fld_name->first << "]\n";
+    os << "STORE_VFIELD " << instr.data << "[" << name << "], " << fld.data
+       << "[" << fld_name->first << "]\n";
   } break;
   case Instruction::Extension:
     break;

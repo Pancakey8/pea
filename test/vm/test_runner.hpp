@@ -15,9 +15,8 @@ extern std::size_t pass, total;
 #define expect(n)                                                              \
   ++total;                                                                     \
   if (!(n)) {                                                                  \
-    std::println("Test failed: {}", #n);                                       \
+    std::println("[{}] Test failed: {}", total, #n);                           \
   } else {                                                                     \
-    std::println("Test passed: {}", #n);                                       \
+    std::println("[{}] Test passed: {}", total, #n);                           \
     ++pass;                                                                    \
   }
-

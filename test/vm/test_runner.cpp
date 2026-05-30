@@ -1,9 +1,9 @@
 #include "test_runner.hpp"
 #include "bytecode.hpp"
 
-#include "operations.cpp"
 #include "branches.cpp"
 #include "classes.cpp"
+#include "operations.cpp"
 
 std::unique_ptr<Vm> vm_run(std::string const &input) {
   Lexer lexer{ input };
@@ -28,9 +28,10 @@ std::unique_ptr<Vm> vm_run(std::string const &input) {
       ir.error().message);
   }
   std::vector<std::uint8_t> bytecode{};
-  BytecodeEmitter emitter{ *ir };
-  emitter.emit(bytecode);
+  BytecodeEmitter emitter{};
+  emitter.emit(*ir, bytecode);
   auto vm = std::make_unique<Vm>(bytecode);
+  vm->boot();
   vm->run();
   return vm;
 }

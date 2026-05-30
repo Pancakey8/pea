@@ -1,0 +1,8 @@
+* Pea
+
+A small BASIC variant
+
+** Description
+
+An object-oriented language syntactically inspired by BASIC/Visual Basic.
+

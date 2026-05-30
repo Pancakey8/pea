@@ -388,7 +388,15 @@ Vm::Vm(std::vector<std::uint8_t> bytes)
     {}
   };
   variables[PEA_ID_PRINTLN] = PeaNaN::of_func(BuiltinFns::PRINTLN);
-  move_start();
+  signal_error = [](Error error) {
+    std::println("VM Exception {}:{} to {}:{}: {}",
+      error.range.start.line,
+      error.range.start.col,
+      error.range.end.line,
+      error.range.end.col,
+      error.message);
+    std::abort();
+  };
 }
 
 void Vm::run(std::optional<std::size_t> until) {
@@ -763,13 +771,20 @@ void Vm::run(std::optional<std::size_t> until) {
       } else
         return error("Field not found");
     } break;
+    case OpCode::ProgPrefix: {
+      auto off = read<std::size_t>();
+      ip += off;
+    } break;
     default:
       return error("Invalid instruction");
     }
   }
 }
 
-void Vm::move_start() {
+void Vm::boot() {
+  if (bytes[ip] == static_cast<std::uint8_t>(OpCode::ProgPrefix)) {
+    ip += 9;
+  }
   if (bytes[ip++] != 'P' || bytes[ip++] != 'E' || bytes[ip++] != 'A')
     return error("Invalid fileformat");
   auto consts = read<std::size_t>();
@@ -812,8 +827,12 @@ void Vm::move_start() {
 }
 
 void Vm::error(std::string_view const str) {
-  std::println("PeaVM: Error: {}", str);
-  std::abort();
+  ip = bytes.size();
+  signal_error(Error{std::string{str}, {}});
+}
+
+void Vm::on_error(std::function<void(Error)> on_error) {
+  signal_error = on_error;
 }
 
 void Vm::var_set(std::size_t id, PeaNaN val) {
@@ -937,3 +956,8 @@ template <typename Int> Int Vm::read_at(std::size_t pos) {
   }
   return std::bit_cast<Int>(b);
 }
+
+void Vm::append(std::vector<std::uint8_t> bytes) {
+  this->bytes.insert(this->bytes.end(), bytes.begin(), bytes.end());
+}
+
