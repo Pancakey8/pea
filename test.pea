@@ -1,31 +1,12 @@
-dim res(2)
-dim rep = 1
+dim arr(3, 5, 2)
 
-label:
-dim x = rep + 1
-
-class Foo
-  dim arr(x)
-  
-  public static sub make()
-    dim f = new Foo
-    for i = 1 to x
-      let (f.arr)(i) = i
+for i = 1 to arr.length(1)
+  for j = 1 to arr.length(2)
+    for k = 1 to arr.length(3)
+      let arr(i, j, k) = arr.dims() * (i + j + k)
     end for
-    return f
-  end sub
+  end for
+end for
 
-  public sub toString()
-    return "Foo" & this.arr
-  end sub
-end class
-
-let res(rep) = Foo.make()
-
-if rep = 1 then
-  let rep = 2
-  goto label
-end if
-
-println(res)
+println(arr)
 

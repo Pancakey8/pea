@@ -156,6 +156,8 @@ struct BuiltinFns {
     CHAR_EQUALS = (1ULL << 48) - 22,
     STRING_EQUALS = (1ULL << 48) - 23,
     FUNCTION_EQUALS = (1ULL << 48) - 24,
+    ARRAY_LENGTH = (1ULL << 48) - 25,
+    ARRAY_DIM = (1ULL << 48) - 26,
   };
 
   static PeaNaN array_at(Vm &vm, std::uint16_t argc);
@@ -182,6 +184,8 @@ struct BuiltinFns {
   static PeaNaN char_equals(Vm &vm, std::uint16_t argc);
   static PeaNaN string_equals(Vm &vm, std::uint16_t argc);
   static PeaNaN function_equals(Vm &vm, std::uint16_t argc);
+  static PeaNaN array_length(Vm &vm, std::uint16_t argc);
+  static PeaNaN array_dim(Vm &vm, std::uint16_t argc);
 
   // helper:
   static std::string to_string(Vm &vm, PeaNaN val) ;
@@ -233,6 +237,8 @@ private:
     BuiltinFns::char_equals,
     BuiltinFns::string_equals,
     BuiltinFns::function_equals,
+    BuiltinFns::array_length,
+    BuiltinFns::array_dim,
   };
 
   void var_set(std::size_t id, PeaNaN val);

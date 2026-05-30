@@ -4,8 +4,8 @@
 
 #include <cassert>
 #include <cstring>
-#include <string>
 #include <print>
+#include <string>
 #include <system_error>
 
 PeaNaN BuiltinFns::array_at(Vm &vm, std::uint16_t argc) {
@@ -103,8 +103,8 @@ std::string BuiltinFns::to_string(Vm &vm, PeaNaN val) {
       if (!res.is_obj() ||
           res.obj()->kind != static_cast<std::uint16_t>(InternalObj::String))
         return "<object>";
-      auto str = reinterpret_cast<PeaObjString*>(res.obj());
-      return std::string{str->str, str->len};
+      auto str = reinterpret_cast<PeaObjString *>(res.obj());
+      return std::string{ str->str, str->len };
     } break;
     }
   }
@@ -283,4 +283,25 @@ PeaNaN BuiltinFns::function_equals(Vm &vm, std::uint16_t argc) {
   auto self = vm.stack[vm.stack.size() - argc].fn();
   auto other = vm.stack[vm.stack.size() - argc + 1].fn();
   return PeaNaN::of_double(self == other);
+}
+
+PeaNaN BuiltinFns::array_length(Vm &vm, std::uint16_t argc) {
+  auto arr = reinterpret_cast<PeaObjArray *>(
+    vm.stack[vm.stack.size() - argc].canon().obj());
+  auto dim = vm.stack[vm.stack.size() - argc + 1].coerce_num(vm);
+
+  if (!dim) {
+    vm.error("Array.length expected number");
+    return PeaNaN::of_null();
+  }
+
+  return PeaNaN::of_double(
+    arr->dim < *dim ? 0 : arr->dims[static_cast<std::size_t>(*dim) - 1]);
+}
+
+PeaNaN BuiltinFns::array_dim(Vm &vm, std::uint16_t argc) {
+  auto arr = reinterpret_cast<PeaObjArray *>(
+    vm.stack[vm.stack.size() - argc].canon().obj());
+
+  return PeaNaN::of_double(arr->dim);
 }

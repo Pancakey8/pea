@@ -115,6 +115,7 @@ enum PeaBuiltinIdentifier {
   PEA_ID_ISTRUTHY = (1 << 16) - 6,
   PEA_ID_EQUALS = (1 << 16) - 7,
   PEA_ID_THIS = (1 << 16) - 8,
+  PEA_ID_DIM = (1 << 16) - 9
 };
 
 class IrGen {
@@ -137,6 +138,7 @@ private:
     { "istruthy", PEA_ID_ISTRUTHY },
     { "equals", PEA_ID_EQUALS },
     { "this", PEA_ID_THIS },
+    { "dims", PEA_ID_DIM }
   };
   std::uint16_t var_next{};
   std::uint16_t var_register(std::string const &name);

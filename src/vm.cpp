@@ -337,6 +337,8 @@ Vm::Vm(std::vector<std::uint8_t> bytes)
       PeaVTable::Method(PEA_ID_TOSTRING, BuiltinFns::ARRAY_TOSTRING),
       PeaVTable::Method(PEA_ID_ISTRUTHY, BuiltinFns::ARRAY_ISTRUTHY),
       PeaVTable::Method(PEA_ID_EQUALS, BuiltinFns::ARRAY_EQUALS),
+      PeaVTable::Method(PEA_ID_LENGTH, BuiltinFns::ARRAY_LENGTH),
+      PeaVTable::Method(PEA_ID_DIM, BuiltinFns::ARRAY_DIM),
     },
     {},
     {},
