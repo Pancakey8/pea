@@ -23,7 +23,38 @@ void print_error(Error const &err) {
     err.message);
 }
 
-int main() {
+int main(int argc, char **argv) {
+  if (argc >= 2) {
+    std::ifstream file{argv[1]};
+    if (!file) {
+      std::println("File not found: {}", argv[1]);
+    }
+    std::stringstream buf{};
+    buf << file.rdbuf();
+    std::string input{buf.str()};
+    file.close();
+    Lexer lexer{input};
+    Parser parser{lexer};
+    auto prog = parser.parse();
+    if (!prog) {
+      print_error(prog.error());
+      return 1;
+    }
+    IrGen irgen{};
+    auto ir = irgen.generate(*prog);
+    if (!ir) {
+      print_error(ir.error());
+      return 1;      
+    }
+    std::vector<std::uint8_t> bytecode{};
+    BytecodeEmitter emitter{};
+    emitter.emit(*ir, bytecode);
+    auto vm = std::make_unique<Vm>();
+    vm->append(bytecode);
+    vm->run();
+    return 0;
+  }
+
   std::println("Pea BASIC Interactive Shell");
 
   std::string collected{};

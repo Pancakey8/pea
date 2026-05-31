@@ -1,12 +1,10 @@
-dim arr(3, 5, 2)
+sub fibo(n)
+if n < 2 then
+return n
+else
+return fibo(n - 1) + fibo(n - 2)
+end if
+end sub
 
-for i = 1 to arr.length(1)
-  for j = 1 to arr.length(2)
-    for k = 1 to arr.length(3)
-      let arr(i, j, k) = arr.dims() * (i + j + k)
-    end for
-  end for
-end for
-
-println(arr)
+println(fibo(25))
 
