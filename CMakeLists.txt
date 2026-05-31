@@ -3,8 +3,8 @@ project(pea)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-set(CMAKE_CXX_FLAGS -fsanitize=address,undefined)
-set(LINK_FLAGS -fsanitize=address,undefined)
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fsanitize=address,undefined")
+set(LINK_FLAGS_DEBUG "${LINK_FLAGS_DEBUG} -fsanitize=address,undefined")
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(READLINE REQUIRED IMPORTED_TARGET readline)

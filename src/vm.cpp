@@ -23,6 +23,17 @@ Int read_on(std::span<std::uint8_t const> bytes, std::size_t &off) {
   return n;
 }
 
+template <typename Int> Int Vm::read() {
+  std::array<std::uint8_t, sizeof(Int)> b{};
+  std::copy(ip, ip + sizeof(Int), b.begin());
+  if constexpr (std::endian::native == std::endian::big) {
+    std::reverse(b.begin(), b.end());
+  }
+  Int n = std::bit_cast<Int>(b);
+  ip += sizeof(Int);
+  return n;
+}
+
 constexpr std::uint64_t QNAN = 0x7ff8000000000000ULL;
 constexpr std::uint64_t TAG_SHIFT = 48;
 constexpr std::uint64_t TAG_MASK = 0x0007000000000000ULL;
@@ -456,15 +467,16 @@ Vm::Vm() {
 }
 
 void Vm::run() {
-  eval(std::span{ bytes.begin() + pos, bytes.end() });
+  ip = &bytes[pos];
+  eval();
   pos += std::distance(bytes.begin() + pos, bytes.end());
 }
 
-void Vm::eval(std::span<std::uint8_t> const &section) {
-  std::size_t ip{ 0 };
-  while (ip < section.size()) {
+void Vm::eval(std::uint8_t *brk) {
+  auto final = brk ? brk : (bytes.data() + bytes.size());
+  while (ip != final) {
     auto instr = ip;
-    auto op = read_on<std::uint8_t>(section, ip);
+    auto op = read<std::uint8_t>();
     switch (static_cast<OpCode>(op)) {
     case OpCode::Add: {
       auto right = stack.back();
@@ -658,14 +670,14 @@ void Vm::eval(std::span<std::uint8_t> const &section) {
       stack.back().deref();
     } break;
     case OpCode::Member: {
-      auto field = read_on<std::uint16_t>(section, ip);
+      auto field = read<std::uint16_t>();
       auto obj = stack.back();
       stack.pop_back();
       stack.push_back(obj.get_member(*this, field));
     } break;
     case OpCode::Dispatch: {
-      auto meth = read_on<std::uint16_t>(section, ip);
-      auto argc = read_on<std::uint16_t>(section, ip);
+      auto meth = read<std::uint16_t>();
+      auto argc = read<std::uint16_t>();
       auto self = stack[stack.size() - argc];
 
       if (auto meth_off = self.get_method(*this, meth)) {
@@ -675,13 +687,13 @@ void Vm::eval(std::span<std::uint8_t> const &section) {
       }
     } break;
     case OpCode::LoadVar: {
-      auto var = read_on<std::uint16_t>(section, ip);
+      auto var = read<std::uint16_t>();
       auto v = var_ref(var);
       stack.push_back(v);
     } break;
     case OpCode::DefineVar: {
-      auto var = read_on<std::uint16_t>(section, ip);
-      auto dim = read_on<std::uint16_t>(section, ip);
+      auto var = read<std::uint16_t>();
+      auto dim = read<std::uint16_t>();
       var_def(var);
       if (dim > 0) {
         std::size_t total = 1;
@@ -714,7 +726,7 @@ void Vm::eval(std::span<std::uint8_t> const &section) {
       *lhs.ref() = val;
     } break;
     case OpCode::LoadConst: {
-      auto id = read_on<std::uint16_t>(section, ip);
+      auto id = read<std::uint16_t>();
       stack.push_back(consts[id].copy(*this));
     } break;
     case OpCode::LoadNull: {
@@ -725,25 +737,25 @@ void Vm::eval(std::span<std::uint8_t> const &section) {
       stack.pop_back();
     } break;
     case OpCode::Goto: {
-      auto off = read_on<std::int32_t>(section, ip);
+      auto off = read<std::int32_t>();
       ip = instr + off;
     } break;
     case OpCode::JumpFalse: {
-      auto off = read_on<std::int32_t>(section, ip);
+      auto off = read<std::int32_t>();
       auto val = stack.back();
       stack.pop_back();
       if (!val.is_truthy(*this))
         ip = instr + off;
     } break;
     case OpCode::JumpTrue: {
-      auto off = read_on<std::int32_t>(section, ip);
+      auto off = read<std::int32_t>();
       auto val = stack.back();
       stack.pop_back();
       if (val.is_truthy(*this))
         ip = instr + off;
     } break;
     case OpCode::Call: {
-      auto argc = read_on<std::uint16_t>(section, ip);
+      auto argc = read<std::uint16_t>();
       auto callee = stack[stack.size() - argc - 1];
       if (callee.canon().is_obj()) {
         auto meth_at = callee.get_method(*this, PEA_ID_AT);
@@ -764,7 +776,7 @@ void Vm::eval(std::span<std::uint8_t> const &section) {
       stack.resize(frame.stack_at);
       shadow_stack.resize(frame.shadows_at);
       stack.push_back(ret);
-      ip = section.size();
+      ip = frame.return_to;
     } break;
     case OpCode::Construct: {
       auto classptr = stack.back();
@@ -787,8 +799,8 @@ void Vm::eval(std::span<std::uint8_t> const &section) {
       stack.push_back(PeaNaN::of_obj(reinterpret_cast<PeaObject *>(obj)));
     } break;
     case OpCode::StoreVField: {
-      auto table = read_on<std::uint16_t>(section, ip);
-      auto field = read_on<std::uint16_t>(section, ip);
+      auto table = read<std::uint16_t>();
+      auto field = read<std::uint16_t>();
       auto val = stack.back();
       stack.pop_back();
       if (auto fld = std::find_if(vtables[table].fields.begin(),
@@ -875,8 +887,8 @@ void Vm::dispatch_call(
     for (std::size_t i = top; i < stack.size(); ++i)
       if (stack[i].is_ref() && stack[i].ref_local())
         stack[i] = PeaNaN::of_ref(stack[i].ref(), false);
-    call_stack.push_back({ top, shadow_stack.size(), in_class });
-    eval(subs[func]);
+    call_stack.push_back({ ip, top, shadow_stack.size(), in_class });
+    ip = subs[func].data();
   } else {
     auto off = (1 << 16) - 1 - func;
     std::size_t top = stack.size() - argc;
@@ -888,7 +900,9 @@ void Vm::dispatch_call(
 
 PeaNaN Vm::dispatch_util(
   std::uint16_t func, std::size_t argc, std::uint16_t in_class) {
+  auto before = ip;
   dispatch_call(func, argc, in_class);
+  eval(before);
   auto val = stack.back();
   stack.pop_back();
   return val.canon();

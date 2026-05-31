@@ -102,6 +102,7 @@ struct PeaObjGeneric {
 };
 
 struct CallFrame {
+  std::uint8_t *return_to;
   std::size_t stack_at;
   std::size_t shadows_at;
   std::uint16_t in_class;
@@ -210,8 +211,11 @@ private:
   std::size_t load_header(std::vector<std::uint8_t> const &bytes);
 
   void error(std::string_view const str);
-  void eval(std::span<std::uint8_t> const &section);
+  void eval(std::uint8_t *brk = nullptr);
+  template<typename Int>
+  Int read();
 
+  std::uint8_t *ip;
   std::size_t pos{};
   std::vector<std::uint8_t> bytes{};
   std::deque<PeaNaN> stack{};
