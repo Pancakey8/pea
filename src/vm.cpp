@@ -177,6 +177,9 @@ std::optional<std::size_t> PeaNaN::get_method(Vm &vm, std::uint16_t id) const {
     return it->sub;
   }
 
+  if (id == PEA_ID_COPY)
+    return BuiltinFns::ANY_COPY;
+
   return {};
 }
 
@@ -294,6 +297,48 @@ bool PeaNaN::equals(Vm &vm, PeaNaN other) {
     return val.is_truthy(vm);
   } else {
     return false;
+  }
+}
+
+PeaNaN PeaNaN::copy(Vm &vm) const {
+  auto self = *this;
+  self.deref();
+  if (!self.is_obj())
+    return self;
+  auto obj = self.obj();
+
+  switch (obj->kind) {
+  case static_cast<std::uint16_t>(InternalObj::Array): {
+    auto arr = reinterpret_cast<PeaObjArray *>(obj);
+
+    auto dims =
+      static_cast<std::size_t *>(calloc(arr->dim, sizeof(std::size_t)));
+    std::copy(arr->dims, arr->dims + arr->dim, dims);
+
+    auto cpy = PeaObjArray::make(arr->dim, dims, arr->len);
+    for (std::size_t i = 0; i < cpy->len; ++i)
+      cpy->elems[i] = arr->elems[i].copy(vm);
+
+    return PeaNaN::of_obj(reinterpret_cast<PeaObject *>(cpy));
+  } break;
+  case static_cast<std::uint16_t>(InternalObj::String): {
+    auto str = reinterpret_cast<PeaObjString *>(obj);
+    auto cpy = PeaObjString::make(str->len, str->str);
+    return PeaNaN::of_obj(reinterpret_cast<PeaObject *>(cpy));
+  } break;
+  default: {
+    auto gen = reinterpret_cast<PeaObjGeneric *>(self.obj());
+    auto const &tbl = vm.vtables[gen->obj.kind];
+
+    auto cpy = static_cast<PeaObjGeneric *>(malloc(
+						   offsetof(PeaObjGeneric, vals) + tbl.fields.size() * sizeof(PeaNaN)));
+
+    cpy->obj.kind = gen->obj.kind;
+    for (std::size_t i = 0; i < tbl.fields.size(); ++i)
+      cpy->vals[i] = gen->vals[i].copy(vm);
+
+    return PeaNaN::of_obj(reinterpret_cast<PeaObject *>(cpy));
+  } break;
   }
 }
 
@@ -725,7 +770,7 @@ void Vm::run(std::optional<std::size_t> until) {
       auto ret = stack.back();
       stack.pop_back();
       if (ret.is_ref() && ret.ref_local())
-	ret.deref();
+        ret.deref();
       auto frame = call_stack.back();
       call_stack.pop_back();
       stack.resize(frame.stack_at);
@@ -748,7 +793,7 @@ void Vm::run(std::optional<std::size_t> until) {
       obj->obj.kind = classptr.cls();
       std::size_t idx = 0;
       for (auto const f : vtables[classptr.cls()].fields) {
-        obj->vals[idx++] = f.val.canon();
+        obj->vals[idx++] = f.val.copy(*this);
       }
 
       stack.push_back(PeaNaN::of_obj(reinterpret_cast<PeaObject *>(obj)));
@@ -829,7 +874,7 @@ void Vm::boot() {
 
 void Vm::error(std::string_view const str) {
   ip = bytes.size();
-  signal_error(Error{std::string{str}, {}});
+  signal_error(Error{ std::string{ str }, {} });
 }
 
 void Vm::on_error(std::function<void(Error)> on_error) {
@@ -916,8 +961,8 @@ void Vm::dispatch_call(
     } else {
       std::size_t top = stack.size() - argc;
       for (std::size_t i = top; i < stack.size(); ++i)
-	if (stack[i].is_ref() && stack[i].ref_local())
-	  stack[i] = PeaNaN::of_ref(stack[i].ref(), false);
+        if (stack[i].is_ref() && stack[i].ref_local())
+          stack[i] = PeaNaN::of_ref(stack[i].ref(), false);
       call_stack.push_back({ ip, top, shadow_stack.size(), in_class });
       ip = callee.fn() + 8;
     }
@@ -961,4 +1006,3 @@ template <typename Int> Int Vm::read_at(std::size_t pos) {
 void Vm::append(std::vector<std::uint8_t> bytes) {
   this->bytes.insert(this->bytes.end(), bytes.begin(), bytes.end());
 }
-

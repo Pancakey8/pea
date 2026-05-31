@@ -3,6 +3,7 @@
 #include "vm.hpp"
 
 #include <cassert>
+#include <cstddef>
 #include <cstring>
 #include <print>
 #include <string>
@@ -305,3 +306,8 @@ PeaNaN BuiltinFns::array_dim(Vm &vm, std::uint16_t argc) {
 
   return PeaNaN::of_double(arr->dim);
 }
+
+PeaNaN BuiltinFns::any_copy(Vm &vm, std::uint16_t argc) {
+  return vm.stack[vm.stack.size() - argc].copy(vm);
+}
+

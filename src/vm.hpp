@@ -60,6 +60,8 @@ struct PeaNaN {
   bool is_truthy(Vm &vm);
 
   bool equals(Vm &vm, PeaNaN other);
+
+  PeaNaN copy(Vm &vm) const;
 };
 
 enum class InternalObj : std::uint16_t {
@@ -158,6 +160,7 @@ struct BuiltinFns {
     FUNCTION_EQUALS = (1ULL << 48) - 24,
     ARRAY_LENGTH = (1ULL << 48) - 25,
     ARRAY_DIM = (1ULL << 48) - 26,
+    ANY_COPY = (1ULL << 48) - 27,
   };
 
   static PeaNaN array_at(Vm &vm, std::uint16_t argc);
@@ -186,6 +189,7 @@ struct BuiltinFns {
   static PeaNaN function_equals(Vm &vm, std::uint16_t argc);
   static PeaNaN array_length(Vm &vm, std::uint16_t argc);
   static PeaNaN array_dim(Vm &vm, std::uint16_t argc);
+  static PeaNaN any_copy(Vm &vm, std::uint16_t argc);
 
   // helper:
   static std::string to_string(Vm &vm, PeaNaN val) ;
@@ -242,6 +246,7 @@ private:
     BuiltinFns::function_equals,
     BuiltinFns::array_length,
     BuiltinFns::array_dim,
+    BuiltinFns::any_copy,
   };
 
   void var_set(std::size_t id, PeaNaN val);
