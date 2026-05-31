@@ -41,9 +41,11 @@ void BytecodeEmitter::emit(
   emit_consts(prog, out);
   emit_subs(prog, out);
   emit_classes(prog, out);
+  auto start = out.size();
   emit_body(prog.prog, out);
+  auto instrs = out.size() - start - 8;
   resolve_ids(prog, out);
-  global_offset += out.size();
+  instrs_offset += instrs;
 }
 
 // <table_size:8><const_count:2><consts...:?>
@@ -186,23 +188,23 @@ void BytecodeEmitter::emit_body(
       out.push_back(static_cast<std::uint8_t>(OpCode::Pop));
       break;
     case Instruction::Label:
-      labels[instr.data] = global_offset + out.size();
+      labels[instr.data] = out.size() - body_start + instrs_offset;
       break;
     case Instruction::Goto:
       out.push_back(static_cast<std::uint8_t>(OpCode::Goto));
-      resolve_labels.push_back(out.size());
+      resolve_labels.push_back({out.size(), out.size() - body_start + instrs_offset});
       emit_le(out, out.end(), static_cast<std::uint16_t>(instr.data));
       out.resize(out.size() + 2);
       break;
     case Instruction::JumpFalse:
       out.push_back(static_cast<std::uint8_t>(OpCode::JumpFalse));
-      resolve_labels.push_back(out.size());
+      resolve_labels.push_back({out.size(), out.size() - body_start + instrs_offset});
       emit_le(out, out.end(), static_cast<std::uint16_t>(instr.data));
       out.resize(out.size() + 2);
       break;
     case Instruction::JumpTrue:
       out.push_back(static_cast<std::uint8_t>(OpCode::JumpTrue));
-      resolve_labels.push_back(out.size());
+      resolve_labels.push_back({out.size(), out.size() - body_start + instrs_offset});
       emit_le(out, out.end(), static_cast<std::uint16_t>(instr.data));
       out.resize(out.size() + 2);
       break;
@@ -291,11 +293,11 @@ void BytecodeEmitter::emit_classes(
 void BytecodeEmitter::resolve_ids(
   ProgramIr const &prog, std::vector<std::uint8_t> &bytes) {
   for (auto const &res : resolve_labels) {
-    std::uint16_t id = (bytes[res + 1] << 8) | bytes[res];
+    std::uint16_t id = (bytes[res.at + 1] << 8) | bytes[res.at];
     auto off = static_cast<std::int32_t>(
       static_cast<std::ptrdiff_t>(labels[id]) -
-      static_cast<std::ptrdiff_t>(global_offset + res) + 1);
-    write_le(bytes, res, static_cast<std::int32_t>(off));
+      static_cast<std::ptrdiff_t>(res.off) + 1);
+    write_le(bytes, res.at, static_cast<std::int32_t>(off));
   }
 
   resolve_labels.clear();

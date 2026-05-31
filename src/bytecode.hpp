@@ -64,8 +64,12 @@ private:
     std::vector<Instruction> const &instrs, std::vector<std::uint8_t> &out);
   void resolve_ids(ProgramIr const &prog, std::vector<std::uint8_t> &bytes);
 
-  std::size_t global_offset{};
+  std::size_t instrs_offset{};
 
   std::vector<std::size_t> labels{};
-  std::vector<std::size_t> resolve_labels{};
+  struct Resolve {
+    std::size_t at;
+    std::size_t off;
+  };
+  std::vector<Resolve> resolve_labels{};
 };
