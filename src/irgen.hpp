@@ -8,24 +8,25 @@
 #include <variant>
 #include <vector>
 
-struct PeaNumber {
+struct ConstNumber {
   double val;
 };
-struct PeaChar {
+struct ConstChar {
   char val;
 };
-struct PeaString {
+struct ConstString {
   std::string val;
 };
-struct PeaFuncPtr {
+struct ConstFuncPtr {
   std::uint16_t id;
 };
-struct PeaClassPtr {
+struct ConstClassPtr {
   std::uint16_t id;
 };
 
-struct PeaValue {
-  std::variant<PeaNumber, PeaChar, PeaString, PeaFuncPtr, PeaClassPtr> data;
+struct ConstData {
+  std::variant<ConstNumber, ConstChar, ConstString, ConstFuncPtr, ConstClassPtr> data;
+  std::uint16_t id;
 };
 
 struct Instruction {
@@ -70,7 +71,7 @@ struct Instruction {
   std::uint16_t data;
 };
 
-struct ClassTable {
+struct ClassData {
   struct Field {
     std::uint16_t name;
     bool is_public;
@@ -86,18 +87,24 @@ struct ClassTable {
 
   std::vector<Field> fields;
   std::vector<Method> methods;
+  
+  std::string name;
+  std::uint16_t id;
+};
+
+struct FuncData {
+  std::vector<Instruction> body;
+  std::string name;
+  std::uint16_t id;
 };
 
 struct ProgramIr {
   std::vector<Instruction> prog;
   std::unordered_map<std::string, std::uint16_t> vars;
-  std::vector<PeaValue> consts;
+  std::vector<ConstData> consts;
   std::unordered_map<std::string, std::uint16_t> labels;
-  std::vector<std::string> func_names;
-  std::vector<std::vector<Instruction>> func_bodies;
-  std::vector<std::string> class_names;
-  std::vector<ClassTable> classes;
-  std::uint16_t class_start;
+  std::vector<FuncData> funcs;
+  std::vector<ClassData> classes;
 };
 
 std::ostream &operator<<(std::ostream &os, ProgramIr const &ir);
@@ -145,11 +152,10 @@ private:
   };
   std::uint16_t var_next{};
   std::uint16_t var_register(std::string const &name);
-  std::optional<std::uint16_t> var_get(std::string const &name);
   std::uint16_t var_fresh();
 
-  std::vector<PeaValue> consts{};
-  std::uint16_t const_register(PeaValue val);
+  std::vector<ConstData> consts{};
+  std::uint16_t const_next{};
 
   std::unordered_map<std::string, std::uint16_t> labels{};
   std::uint16_t label_next{};
@@ -158,13 +164,11 @@ private:
 
   std::vector<LoopLabels> loop_stack{};
 
-  std::vector<std::string> func_names{};
-  std::vector<std::vector<Instruction>> func_bodies{};
+  std::vector<FuncData> funcs{};
   std::uint16_t func_next{};
 
-  std::vector<std::string> class_names{};
-  std::vector<ClassTable> classes{};
-  std::uint16_t class_start{};
+  std::vector<ClassData> classes{};
+  std::uint16_t class_next{};
 
-  std::expected<void, Error> sub_emit(SubDecl const &s, std::uint16_t id);
+  std::expected<void, Error> sub_emit(SubDecl const &s, std::size_t index);
 };

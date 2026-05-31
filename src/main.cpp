@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <print>
 #include <readline/history.h>
 #include <readline/readline.h>
@@ -31,9 +32,9 @@ int main() {
 
   IrGen irgen{};
   BytecodeEmitter byteEmitter{};
-  Vm vm{ {} };
+  auto vm = std::make_unique<Vm>();
 
-  vm.on_error([](Error error) {
+  vm->on_error([](Error error) {
     std::println("VM Exception {}:{} to {}:{}: {}",
       error.range.start.line,
       error.range.start.col,
@@ -104,8 +105,7 @@ int main() {
     //   std::print("\n");
     // }
 
-    vm.append(bytecode);
-    vm.boot();
-    vm.run();
+    vm->append(bytecode);
+    vm->run();
   }
 }

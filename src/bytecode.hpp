@@ -41,8 +41,15 @@ enum class OpCode : std::uint8_t {
   Return,
   Construct,
   StoreVField,
-  ProgPrefix = 0xFE,
   Extension = 0xFF
+};
+
+enum class ConstKind : std::uint8_t {
+  Number,
+  Char,
+  String,
+  FuncPtr,
+  ClassPtr
 };
 
 class BytecodeEmitter {
@@ -58,12 +65,6 @@ private:
   void resolve_ids(ProgramIr const &prog, std::vector<std::uint8_t> &bytes);
 
   std::size_t global_offset{};
-
-  std::vector<std::size_t> consts{};
-  std::vector<std::size_t> resolve_consts{};
-
-  std::vector<std::size_t> subs{};
-  std::vector<std::size_t> resolve_subs{};
 
   std::vector<std::size_t> labels{};
   std::vector<std::size_t> resolve_labels{};

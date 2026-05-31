@@ -32,12 +32,8 @@ void write_le(std::vector<std::uint8_t> &out, std::size_t offset, Int num) {
 
 void BytecodeEmitter::emit(
   ProgramIr const &prog, std::vector<std::uint8_t> &out) {
-  consts.resize(prog.consts.size());
   labels.resize(prog.labels.size());
-  subs.resize(prog.func_bodies.size());
 
-  out.push_back(static_cast<unsigned char>(OpCode::ProgPrefix));
-  out.resize(9);
   out.insert(out.end(),
     { static_cast<unsigned char>('P'),
       static_cast<unsigned char>('E'),
@@ -45,10 +41,6 @@ void BytecodeEmitter::emit(
   emit_consts(prog, out);
   emit_subs(prog, out);
   emit_classes(prog, out);
-  write_le(out,
-    1,
-    out.size() -
-      1); // entire header - 9 (for prefix instruction) + 8 (for instr length)
   emit_body(prog.prog, out);
   resolve_ids(prog, out);
   global_offset += out.size();
@@ -57,7 +49,6 @@ void BytecodeEmitter::emit(
 // <table_size:8><const_count:2><consts...:?>
 void BytecodeEmitter::emit_consts(
   ProgramIr const &prog, std::vector<std::uint8_t> &out) {
-  enum ValTypes : std::uint8_t { Number, Char, String, FuncPtr, ClassPtr };
 
   auto head_start = out.size();
   out.resize(out.size() + sizeof(std::size_t) + sizeof(std::uint16_t));
@@ -65,33 +56,31 @@ void BytecodeEmitter::emit_consts(
   auto table_size = head_start;
   auto const_count = table_size + sizeof(std::size_t);
 
-  for (auto const &[i, c] : prog.consts | std::ranges::views::enumerate) {
-    consts[i] = global_offset + out.size();
+  for (auto const &c : prog.consts) {
+    emit_le(out, out.end(), static_cast<std::uint16_t>(c.id));
     std::visit(
-      Overloaded{ [&](PeaNumber const &v) {
-                   out.push_back(Number);
+      Overloaded{ [&](ConstNumber const &v) {
+                   out.push_back(static_cast<std::uint8_t>(ConstKind::Number));
                    emit_le(out, out.end(), std::bit_cast<std::uint64_t>(v.val));
                  },
-        [&](PeaChar const &v) {
-          out.push_back(Char);
+        [&](ConstChar const &v) {
+          out.push_back(static_cast<std::uint8_t>(ConstKind::Char));
           emit_le(out, out.end(), static_cast<std::uint8_t>(v.val));
         },
-        [&](PeaString const &v) {
-          out.push_back(String);
+        [&](ConstString const &v) {
+          out.push_back(static_cast<std::uint8_t>(ConstKind::String));
           emit_le(out, out.end(), static_cast<std::uint64_t>(v.val.size()));
           out.insert(out.end(),
             reinterpret_cast<const unsigned char *>(v.val.data()),
             reinterpret_cast<const unsigned char *>(
               v.val.data() + v.val.size()));
         },
-        [&](PeaFuncPtr const &v) {
-          out.push_back(FuncPtr);
-          resolve_subs.push_back(out.size());
+        [&](ConstFuncPtr const &v) {
+          out.push_back(static_cast<std::uint8_t>(ConstKind::FuncPtr));
           emit_le(out, out.end(), static_cast<std::uint16_t>(v.id));
-          out.resize(out.size() + 6);
         },
-        [&](PeaClassPtr const &v) {
-          out.push_back(ClassPtr);
+        [&](ConstClassPtr const &v) {
+          out.push_back(static_cast<std::uint8_t>(ConstKind::ClassPtr));
           emit_le(out, out.end(), static_cast<std::uint16_t>(v.id));
         } },
       c.data);
@@ -191,9 +180,7 @@ void BytecodeEmitter::emit_body(
     } break;
     case Instruction::LoadConst:
       out.push_back(static_cast<std::uint8_t>(OpCode::LoadConst));
-      resolve_consts.push_back(out.size());
       emit_le(out, out.end(), static_cast<std::uint16_t>(instr.data));
-      out.resize(out.size() + 6);
       break;
     case Instruction::Pop:
       out.push_back(static_cast<std::uint8_t>(OpCode::Pop));
@@ -249,7 +236,7 @@ void BytecodeEmitter::emit_body(
   }
 
   write_le(
-    out, body_size, static_cast<std::uint64_t>(out.size() - body_start - 8));
+    out, body_size, static_cast<std::uint64_t>(out.size() - body_start));
 }
 
 // <table_size:8><sub_count:2><subs...:?>
@@ -261,15 +248,14 @@ void BytecodeEmitter::emit_subs(
   auto table_size = head_start;
   auto sub_count = table_size + sizeof(std::size_t);
 
-  for (auto const &[i, sub] :
-    prog.func_bodies | std::ranges::views::enumerate) {
-    subs[i] = global_offset + out.size();
-    emit_body(sub, out);
+  for (auto const &sub : prog.funcs) {
+    emit_le(out, out.end(), static_cast<std::uint16_t>(sub.id));
+    emit_body(sub.body, out);
   }
 
   write_le(
     out, table_size, static_cast<std::uint64_t>(out.size() - head_start - 8));
-  write_le(out, sub_count, static_cast<std::uint16_t>(prog.func_bodies.size()));
+  write_le(out, sub_count, static_cast<std::uint16_t>(prog.funcs.size()));
 }
 
 void BytecodeEmitter::emit_classes(
@@ -280,8 +266,8 @@ void BytecodeEmitter::emit_classes(
   auto table_size = head_start;
   auto class_count = table_size + sizeof(std::size_t);
 
-  for (auto const [i, table] : prog.classes | std::ranges::views::enumerate) {
-    emit_le(out, out.end(), static_cast<std::uint16_t>(prog.class_start + i));
+  for (auto const table : prog.classes) {
+    emit_le(out, out.end(), static_cast<std::uint16_t>(table.id));
     emit_le(out, out.end(), static_cast<std::size_t>(table.fields.size()));
     for (auto const field : table.fields) {
       emit_le(out, out.end(), static_cast<std::uint8_t>(field.is_public));
@@ -293,9 +279,7 @@ void BytecodeEmitter::emit_classes(
       emit_le(out, out.end(), static_cast<std::uint8_t>(meth.is_public));
       emit_le(out, out.end(), static_cast<std::uint8_t>(meth.is_static));
       emit_le(out, out.end(), static_cast<std::uint16_t>(meth.name));
-      resolve_subs.push_back(out.size());
       emit_le(out, out.end(), static_cast<std::uint16_t>(meth.id));
-      out.resize(out.size() + 6);
     }
   }
 
@@ -306,20 +290,6 @@ void BytecodeEmitter::emit_classes(
 
 void BytecodeEmitter::resolve_ids(
   ProgramIr const &prog, std::vector<std::uint8_t> &bytes) {
-  for (auto const &res : resolve_consts) {
-    std::uint16_t id = (bytes[res + 1] << 8) | bytes[res];
-    write_le(bytes, res, static_cast<std::uint64_t>(consts[id]));
-  }
-
-  resolve_consts.clear();
-
-  for (auto const &res : resolve_subs) {
-    std::uint16_t id = (bytes[res + 1] << 8) | bytes[res];
-    write_le(bytes, res, static_cast<std::uint64_t>(subs[id]));
-  }
-
-  resolve_subs.clear();
-
   for (auto const &res : resolve_labels) {
     std::uint16_t id = (bytes[res + 1] << 8) | bytes[res];
     auto off = static_cast<std::int32_t>(

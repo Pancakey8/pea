@@ -30,8 +30,8 @@ std::unique_ptr<Vm> vm_run(std::string const &input) {
   std::vector<std::uint8_t> bytecode{};
   BytecodeEmitter emitter{};
   emitter.emit(*ir, bytecode);
-  auto vm = std::make_unique<Vm>(bytecode);
-  vm->boot();
+  auto vm = std::make_unique<Vm>();
+  vm->append(bytecode);
   vm->run();
   return vm;
 }

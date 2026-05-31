@@ -11,6 +11,18 @@
 #include <print>
 #include <ranges>
 
+template <typename Int>
+Int read_on(std::span<std::uint8_t const> bytes, std::size_t &off) {
+  std::array<std::uint8_t, sizeof(Int)> b{};
+  std::copy(bytes.begin() + off, bytes.begin() + off + sizeof(Int), b.begin());
+  if constexpr (std::endian::native == std::endian::big) {
+    std::reverse(b.begin(), b.end());
+  }
+  Int n = std::bit_cast<Int>(b);
+  off += sizeof(Int);
+  return n;
+}
+
 constexpr std::uint64_t QNAN = 0x7ff8000000000000ULL;
 constexpr std::uint64_t TAG_SHIFT = 48;
 constexpr std::uint64_t TAG_MASK = 0x0007000000000000ULL;
@@ -39,9 +51,8 @@ PeaNaN PeaNaN::of_char(char c) {
   return { QNAN | make_tag(TAG_CHAR) | static_cast<std::uint8_t>(c) };
 }
 
-PeaNaN PeaNaN::of_func(std::size_t sz) {
-  return { QNAN | make_tag(TAG_FN) |
-           (static_cast<std::uint64_t>(sz) & PAYLOAD_MASK) };
+PeaNaN PeaNaN::of_func(std::uint16_t sz) {
+  return { QNAN | make_tag(TAG_FN) | sz };
 }
 
 PeaNaN PeaNaN::of_null() { return { QNAN | make_tag(TAG_NULL) }; }
@@ -86,8 +97,8 @@ bool PeaNaN::is_class() const {
   return is_boxed(bits) && ((bits & TAG_MASK) == make_tag(TAG_CLASS));
 }
 
-std::size_t PeaNaN::fn() const {
-  return static_cast<std::size_t>(bits & PAYLOAD_MASK);
+std::uint16_t PeaNaN::fn() const {
+  return static_cast<std::uint16_t>(bits & 0xFFFF);
 }
 
 PeaObject *PeaNaN::obj() const {
@@ -331,7 +342,7 @@ PeaNaN PeaNaN::copy(Vm &vm) const {
     auto const &tbl = vm.vtables[gen->obj.kind];
 
     auto cpy = static_cast<PeaObjGeneric *>(malloc(
-						   offsetof(PeaObjGeneric, vals) + tbl.fields.size() * sizeof(PeaNaN)));
+      offsetof(PeaObjGeneric, vals) + tbl.fields.size() * sizeof(PeaNaN)));
 
     cpy->obj.kind = gen->obj.kind;
     for (std::size_t i = 0; i < tbl.fields.size(); ++i)
@@ -365,8 +376,8 @@ PeaObjArray *PeaObjArray::make(
   return arr;
 }
 
-Vm::Vm(std::vector<std::uint8_t> bytes)
-    : bytes(std::move(bytes)), variables{ 1ULL << 16, PeaNaN::of_null() } {
+Vm::Vm() {
+  variables.fill(PeaNaN::of_null());
   vtables[static_cast<std::uint16_t>(InternalObj::String)] = {
     {
       PeaVTable::Method(PEA_ID_TOSTRING, BuiltinFns::STRING_TOSTRING),
@@ -444,11 +455,16 @@ Vm::Vm(std::vector<std::uint8_t> bytes)
   };
 }
 
-void Vm::run(std::optional<std::size_t> until) {
-  auto max = until ? *until : bytes.size();
-  while (ip < max) {
+void Vm::run() {
+  eval(std::span{ bytes.begin() + pos, bytes.end() });
+  pos += std::distance(bytes.begin() + pos, bytes.end());
+}
+
+void Vm::eval(std::span<std::uint8_t> const &section) {
+  std::size_t ip{ 0 };
+  while (ip < section.size()) {
     auto instr = ip;
-    auto op = read<std::uint8_t>();
+    auto op = read_on<std::uint8_t>(section, ip);
     switch (static_cast<OpCode>(op)) {
     case OpCode::Add: {
       auto right = stack.back();
@@ -642,30 +658,30 @@ void Vm::run(std::optional<std::size_t> until) {
       stack.back().deref();
     } break;
     case OpCode::Member: {
-      auto field = read<std::uint16_t>();
+      auto field = read_on<std::uint16_t>(section, ip);
       auto obj = stack.back();
       stack.pop_back();
       stack.push_back(obj.get_member(*this, field));
     } break;
     case OpCode::Dispatch: {
-      auto meth = read<std::uint16_t>();
-      auto argc = read<std::uint16_t>();
+      auto meth = read_on<std::uint16_t>(section, ip);
+      auto argc = read_on<std::uint16_t>(section, ip);
       auto self = stack[stack.size() - argc];
 
       if (auto meth_off = self.get_method(*this, meth)) {
-        dispatch_call(PeaNaN::of_func(*meth_off), argc, self.what());
+        dispatch_call(*meth_off, argc, self.what());
       } else {
         return error("Dispatching non-existent method");
       }
     } break;
     case OpCode::LoadVar: {
-      auto var = read<std::uint16_t>();
+      auto var = read_on<std::uint16_t>(section, ip);
       auto v = var_ref(var);
       stack.push_back(v);
     } break;
     case OpCode::DefineVar: {
-      auto var = read<std::uint16_t>();
-      auto dim = read<std::uint16_t>();
+      auto var = read_on<std::uint16_t>(section, ip);
+      auto dim = read_on<std::uint16_t>(section, ip);
       var_def(var);
       if (dim > 0) {
         std::size_t total = 1;
@@ -698,35 +714,8 @@ void Vm::run(std::optional<std::size_t> until) {
       *lhs.ref() = val;
     } break;
     case OpCode::LoadConst: {
-      auto off = read<std::size_t>();
-      auto kind = read_at<std::uint8_t>(off);
-      switch (kind) {
-      case 0: { // Number
-        auto bits = read_at<std::uint64_t>(off + 1);
-        auto dbl = std::bit_cast<double>(bits);
-        stack.push_back(PeaNaN::of_double(dbl));
-      } break;
-      case 1: { // Char
-        auto bits = read_at<std::uint8_t>(off + 1);
-        stack.push_back(PeaNaN::of_char(static_cast<char>(bits)));
-      } break;
-      case 2: { // String
-        auto len = read_at<std::uint64_t>(off + 1);
-        auto str =
-          PeaObjString::make(len, reinterpret_cast<char *>(&bytes[off + 9]));
-        stack.push_back(PeaNaN::of_obj(reinterpret_cast<PeaObject *>(str)));
-      } break;
-      case 3: { // FuncPtr
-        auto ptr = read_at<std::size_t>(off + 1);
-        stack.push_back(PeaNaN::of_func(ptr));
-      } break;
-      case 4: {
-        auto ptr = read_at<std::size_t>(off + 1);
-        stack.push_back(PeaNaN::of_class(ptr));
-      } break;
-      default:
-        return error("Invalid constant type");
-      }
+      auto id = read_on<std::uint16_t>(section, ip);
+      stack.push_back(consts[id].copy(*this));
     } break;
     case OpCode::LoadNull: {
       stack.push_back(PeaNaN::of_null());
@@ -736,34 +725,33 @@ void Vm::run(std::optional<std::size_t> until) {
       stack.pop_back();
     } break;
     case OpCode::Goto: {
-      auto off = read<std::int32_t>();
+      auto off = read_on<std::int32_t>(section, ip);
       ip = instr + off;
     } break;
     case OpCode::JumpFalse: {
-      auto off = read<std::int32_t>();
+      auto off = read_on<std::int32_t>(section, ip);
       auto val = stack.back();
       stack.pop_back();
       if (!val.is_truthy(*this))
         ip = instr + off;
     } break;
     case OpCode::JumpTrue: {
-      auto off = read<std::int32_t>();
+      auto off = read_on<std::int32_t>(section, ip);
       auto val = stack.back();
       stack.pop_back();
       if (val.is_truthy(*this))
         ip = instr + off;
     } break;
     case OpCode::Call: {
-      auto argc = read<std::uint16_t>();
+      auto argc = read_on<std::uint16_t>(section, ip);
       auto callee = stack[stack.size() - argc - 1];
       if (callee.canon().is_obj()) {
         auto meth_at = callee.get_method(*this, PEA_ID_AT);
         if (!meth_at)
           return error("Indexing non-indexable object");
-        dispatch_call(
-          PeaNaN::of_func(*meth_at), argc + 1, callee.canon().what());
+        dispatch_call(*meth_at, argc + 1, callee.canon().what());
       } else if (callee.canon().is_fn()) {
-        dispatch_call(callee, argc + 1);
+        dispatch_call(callee.canon().fn(), argc + 1);
       }
     } break;
     case OpCode::Return: {
@@ -776,7 +764,7 @@ void Vm::run(std::optional<std::size_t> until) {
       stack.resize(frame.stack_at);
       shadow_stack.resize(frame.shadows_at);
       stack.push_back(ret);
-      ip = frame.return_to;
+      ip = section.size();
     } break;
     case OpCode::Construct: {
       auto classptr = stack.back();
@@ -799,8 +787,8 @@ void Vm::run(std::optional<std::size_t> until) {
       stack.push_back(PeaNaN::of_obj(reinterpret_cast<PeaObject *>(obj)));
     } break;
     case OpCode::StoreVField: {
-      auto table = read<std::uint16_t>();
-      auto field = read<std::uint16_t>();
+      auto table = read_on<std::uint16_t>(section, ip);
+      auto field = read_on<std::uint16_t>(section, ip);
       auto val = stack.back();
       stack.pop_back();
       if (auto fld = std::find_if(vtables[table].fields.begin(),
@@ -816,64 +804,13 @@ void Vm::run(std::optional<std::size_t> until) {
       } else
         return error("Field not found");
     } break;
-    case OpCode::ProgPrefix: {
-      auto off = read<std::size_t>();
-      ip += off;
-    } break;
     default:
       return error("Invalid instruction");
     }
   }
 }
 
-void Vm::boot() {
-  if (bytes[ip] == static_cast<std::uint8_t>(OpCode::ProgPrefix)) {
-    ip += 9;
-  }
-  if (bytes[ip++] != 'P' || bytes[ip++] != 'E' || bytes[ip++] != 'A')
-    return error("Invalid fileformat");
-  auto consts = read<std::size_t>();
-  ip += consts;
-  auto subs = read<std::size_t>();
-  ip += subs;
-  auto classes = read<std::size_t>();
-  auto class_count = read<std::uint16_t>();
-  for (std::uint16_t i = 0; i < class_count; ++i) {
-    PeaVTable table{};
-    auto id = read<std::uint16_t>();
-    auto fields = read<std::size_t>();
-    for (std::size_t j = 0; j < fields; ++j) {
-      bool is_public = read<std::uint8_t>();
-      bool is_static = read<std::uint8_t>();
-      auto name = read<std::uint16_t>();
-      if (is_static) {
-        table.static_fields.push_back(
-          PeaVTable::Field{ is_public, name, PeaNaN::of_null() });
-      } else {
-        table.fields.push_back(
-          PeaVTable::Field{ is_public, name, PeaNaN::of_null() });
-      }
-    }
-    auto methods = read<std::size_t>();
-    for (std::size_t j = 0; j < methods; ++j) {
-      bool is_public = read<std::uint8_t>();
-      bool is_static = read<std::uint8_t>();
-      auto name = read<std::uint16_t>();
-      auto sub = read<std::uint64_t>();
-      if (is_static) {
-        table.static_methods.push_back(
-          PeaVTable::Method{ is_public, name, sub });
-      } else {
-        table.methods.push_back(PeaVTable::Method{ is_public, name, sub });
-      }
-    }
-    vtables[id] = std::move(table);
-  }
-  auto body = read<std::size_t>();
-}
-
 void Vm::error(std::string_view const str) {
-  ip = bytes.size();
   signal_error(Error{ std::string{ str }, {} });
 }
 
@@ -915,23 +852,6 @@ void Vm::var_def(std::size_t id) {
   shadow_stack.push_back({ id, PeaNaN::of_null() });
 }
 
-PeaNaN Vm::var_get(std::size_t id) {
-  if (!call_stack.empty()) {
-    auto bot = call_stack.back().shadows_at;
-    for (std::size_t i = bot; i < shadow_stack.size(); ++i) {
-      if (shadow_stack[i].first == id) {
-        if (shadow_stack[i].second.is_ref()) {
-          return *shadow_stack[i].second.ref();
-        } else {
-          return shadow_stack[i].second;
-        }
-      }
-    }
-  }
-
-  return variables[id].is_ref() ? *variables[id].ref() : variables[id];
-}
-
 PeaNaN Vm::var_ref(std::size_t id) {
   if (!call_stack.empty()) {
     auto bot = call_stack.back().shadows_at;
@@ -949,60 +869,139 @@ PeaNaN Vm::var_ref(std::size_t id) {
 }
 
 void Vm::dispatch_call(
-  PeaNaN callee, std::uint16_t argc, std::uint16_t in_class) {
-  callee.deref();
-  if (callee.is_fn()) {
-    if (callee.fn() > bytes.size()) {
-      std::uint16_t off = (1ULL << 48) - 1 - callee.fn();
-      auto top = stack.size() - argc;
-      auto val = internal_fns[off](*this, argc);
-      stack.resize(top);
-      stack.push_back(val);
-    } else {
-      std::size_t top = stack.size() - argc;
-      for (std::size_t i = top; i < stack.size(); ++i)
-        if (stack[i].is_ref() && stack[i].ref_local())
-          stack[i] = PeaNaN::of_ref(stack[i].ref(), false);
-      call_stack.push_back({ ip, top, shadow_stack.size(), in_class });
-      ip = callee.fn() + 8;
-    }
+  std::uint16_t func, std::size_t argc, std::uint16_t in_class) {
+  if (func < subs.size()) {
+    std::size_t top = stack.size() - argc;
+    for (std::size_t i = top; i < stack.size(); ++i)
+      if (stack[i].is_ref() && stack[i].ref_local())
+        stack[i] = PeaNaN::of_ref(stack[i].ref(), false);
+    call_stack.push_back({ top, shadow_stack.size(), in_class });
+    eval(subs[func]);
   } else {
-    return error("Trying to call non-function");
+    auto off = (1 << 16) - 1 - func;
+    std::size_t top = stack.size() - argc;
+    auto val = internal_fns[off](*this, argc);
+    stack.resize(top);
+    stack.push_back(val);
   }
 }
 
 PeaNaN Vm::dispatch_util(
-  std::size_t callee, std::uint16_t argc, std::uint16_t in_class) {
-  auto top = stack.size() - argc;
-  auto until = ip;
-  dispatch_call(PeaNaN::of_func(callee), argc, in_class);
-  run(until);
+  std::uint16_t func, std::size_t argc, std::uint16_t in_class) {
+  dispatch_call(func, argc, in_class);
   auto val = stack.back();
-  stack.resize(top);
-  val.deref();
-  return val;
+  stack.pop_back();
+  return val.canon();
 }
 
-template <typename Int> Int Vm::read() {
-  std::array<std::uint8_t, sizeof(Int)> b{};
-  std::copy(bytes.begin() + ip, bytes.begin() + ip + sizeof(Int), b.begin());
-  if constexpr (std::endian::native == std::endian::big) {
-    std::reverse(b.begin(), b.end());
+std::size_t Vm::load_header(std::vector<std::uint8_t> const &bytes) {
+  std::size_t off{};
+  if (bytes[off++] != 'P' || bytes[off++] != 'E' || bytes[off++] != 'A') {
+    error("Invalid fileformat");
+    return 0;
   }
-  Int n = std::bit_cast<Int>(b);
-  ip += sizeof(Int);
-  return n;
-}
 
-template <typename Int> Int Vm::read_at(std::size_t pos) {
-  std::array<std::uint8_t, sizeof(Int)> b{};
-  std::copy(bytes.begin() + pos, bytes.begin() + pos + sizeof(Int), b.begin());
-  if constexpr (std::endian::native == std::endian::big) {
-    std::reverse(b.begin(), b.end());
+  auto const_size = read_on<std::size_t>(bytes, off);
+  auto const_end = off + const_size;
+  auto const_count = read_on<std::uint16_t>(bytes, off);
+
+  for (std::size_t i = 0; i < const_count; ++i) {
+    auto id = read_on<std::uint16_t>(bytes, off);
+    auto type = read_on<std::uint8_t>(bytes, off);
+    switch (static_cast<ConstKind>(type)) {
+    case ConstKind::Number: {
+      auto num = read_on<std::uint64_t>(bytes, off);
+      consts[id] = PeaNaN::of_double(std::bit_cast<double>(num));
+    } break;
+    case ConstKind::Char: {
+      auto num = read_on<std::uint8_t>(bytes, off);
+      consts[id] = PeaNaN::of_char(static_cast<char>(num));
+    } break;
+    case ConstKind::String: {
+      auto len = read_on<std::size_t>(bytes, off);
+      auto str =
+        PeaObjString::make(len, reinterpret_cast<char const *>(&bytes[off]));
+      off += len;
+      consts[id] = PeaNaN::of_obj(reinterpret_cast<PeaObject *>(str));
+    } break;
+    case ConstKind::FuncPtr: {
+      auto ptr = read_on<std::uint16_t>(bytes, off);
+      consts[id] = PeaNaN::of_func(ptr);
+    } break;
+    case ConstKind::ClassPtr: {
+      auto ptr = read_on<std::uint16_t>(bytes, off);
+      consts[id] = PeaNaN::of_class(ptr);
+    } break;
+    default: {
+      error("Invalid constant");
+      return 0;
+    } break;
+    }
   }
-  return std::bit_cast<Int>(b);
+
+  off = const_end;
+
+  auto sub_size = read_on<std::size_t>(bytes, off);
+  auto sub_end = off + sub_size;
+  auto sub_count = read_on<std::uint16_t>(bytes, off);
+
+  for (std::uint16_t i = 0; i < sub_count; ++i) {
+    auto id = read_on<std::uint16_t>(bytes, off);
+    auto body_size = read_on<std::size_t>(bytes, off);
+    subs[id] =
+      std::vector(bytes.begin() + off, bytes.begin() + off + body_size);
+    off += body_size;
+  }
+
+  off = sub_end;
+
+  auto class_size = read_on<std::size_t>(bytes, off);
+  auto class_end = off + class_size;
+  auto class_count = read_on<std::uint16_t>(bytes, off);
+
+  for (std::uint16_t i = 0; i < class_count; ++i) {
+    PeaVTable table{};
+    auto id = read_on<std::uint16_t>(bytes, off);
+
+    auto fields = read_on<std::size_t>(bytes, off);
+    for (std::size_t j = 0; j < fields; ++j) {
+      bool is_public = read_on<std::uint8_t>(bytes, off);
+      bool is_static = read_on<std::uint8_t>(bytes, off);
+      auto name = read_on<std::uint16_t>(bytes, off);
+      if (is_static) {
+        table.static_fields.push_back(
+          PeaVTable::Field{ is_public, name, PeaNaN::of_null() });
+      } else {
+        table.fields.push_back(
+          PeaVTable::Field{ is_public, name, PeaNaN::of_null() });
+      }
+    }
+
+    auto methods = read_on<std::size_t>(bytes, off);
+    for (std::size_t j = 0; j < methods; ++j) {
+      bool is_public = read_on<std::uint8_t>(bytes, off);
+      bool is_static = read_on<std::uint8_t>(bytes, off);
+      auto name = read_on<std::uint16_t>(bytes, off);
+      auto sub = read_on<std::uint16_t>(bytes, off);
+      if (is_static) {
+        table.static_methods.push_back(
+          PeaVTable::Method{ is_public, name, sub });
+      } else {
+        table.methods.push_back(PeaVTable::Method{ is_public, name, sub });
+      }
+    }
+
+    vtables[id] = std::move(table);
+  }
+
+  off = class_end;
+
+  return off;
 }
 
 void Vm::append(std::vector<std::uint8_t> bytes) {
-  this->bytes.insert(this->bytes.end(), bytes.begin(), bytes.end());
+  auto off = load_header(bytes);
+  auto body_len = read_on<std::size_t>(bytes, off);
+  this->bytes.insert(
+    this->bytes.end(), bytes.begin() + off, bytes.begin() + off + body_len);
 }

@@ -1,11 +1,12 @@
 #include "irgen.hpp"
 #include "ast.hpp"
 #include "lexer.hpp"
+#include <algorithm>
 #include <cassert>
 #include <cstddef>
 #include <format>
-#include <print>
 #include <iostream>
+#include <print>
 #include <ranges>
 #include <utility>
 #include <variant>
@@ -22,16 +23,11 @@ std::expected<ProgramIr, Error> IrGen::generate(Program const &prog) {
 
   ProgramIr ir{ std::move(this->prog),
     variables,
-    consts,
+    std::move(consts),
     labels,
-    func_names,
-    func_bodies,
-    std::move(class_names),
-    std::move(classes),
-    class_start };
+    std::move(funcs),
+    std::move(classes) };
 
-  class_start = next;
-  
   return ir;
 }
 
@@ -133,8 +129,9 @@ std::expected<void, Error> IrGen::emit(Stmt const &stmt) {
         if (auto res = emit(*s.step); !res)
           return std::unexpected(res.error());
       } else {
-        auto c = const_register({ PeaNumber{ 1 } });
-        prog.push_back({ Instruction::LoadConst, c });
+        auto id = const_next++;
+        consts.push_back({ ConstNumber{ 1 }, id });
+        prog.push_back({ Instruction::LoadConst, id });
       }
       prog.push_back({ Instruction::Deref });
       prog.push_back({ Instruction::LoadVar, step_val });
@@ -231,16 +228,17 @@ std::expected<void, Error> IrGen::emit(Stmt const &stmt) {
     },
     [&](SubDecl const &s) -> std::expected<void, Error> {
       std::uint16_t id = func_next++;
-      func_names.push_back(s.name);
-      func_bodies.push_back({});
+      funcs.push_back(FuncData{ {}, s.name, id });
+      auto index = funcs.size() - 1;
 
       auto v = var_register(s.name);
-      auto c = const_register(PeaValue{ PeaFuncPtr{ id } });
+      auto c = const_next++;
+      consts.push_back(ConstData{ ConstFuncPtr{ id }, c });
       prog.push_back({ Instruction::LoadConst, c });
       prog.push_back({ Instruction::LoadVar, v });
       prog.push_back({ Instruction::StoreVar });
 
-      if (auto res = sub_emit(s, id); !res)
+      if (auto res = sub_emit(s, index); !res)
         return std::unexpected(res.error());
 
       return {};
@@ -263,20 +261,22 @@ std::expected<void, Error> IrGen::emit(Stmt const &stmt) {
       return {};
     },
     [&](ClassDecl const &s) -> std::expected<void, Error> {
-      ClassTable table{};
-      class_names.push_back(s.name);
-      classes.push_back({});
-      std::uint16_t id = classes.size() - 1;
+      std::uint16_t id = class_next++;
+      classes.push_back(ClassData{});
+      std::uint16_t index = classes.size() - 1;
+      classes[index].name = s.name;
+      classes[index].id = id;
 
       auto name = var_register(s.name);
-      auto c = const_register(PeaValue{ PeaClassPtr{ id } });
+      auto c = const_next++;
+      consts.push_back(ConstData{ ConstClassPtr{ id }, c });
       prog.push_back({ Instruction::LoadConst, c });
       prog.push_back({ Instruction::LoadVar, name });
       prog.push_back({ Instruction::StoreVar });
 
       auto fields_temp = var_fresh();
       for (auto const &field : s.fields) {
-        ClassTable::Field fld{};
+        ClassData::Field fld{};
         fld.name = var_register(field.decl.name);
         fld.is_public = field.is_public;
         fld.is_static = field.is_static;
@@ -302,22 +302,21 @@ std::expected<void, Error> IrGen::emit(Stmt const &stmt) {
           prog.push_back({ Instruction::StoreVField, id });
           prog.push_back({ Instruction::Extension, fld.name });
         }
-        table.fields.push_back(fld);
+        classes[index].fields.push_back(fld);
       }
 
       for (auto const &meth : s.methods) {
         auto name = var_register(meth.decl.name);
         auto id = func_next++;
-        func_names.push_back(s.name);
-        func_bodies.push_back({});
+        funcs.push_back(FuncData{ {}, s.name + "." + meth.decl.name, id });
+        auto func_index = funcs.size() - 1;
 
-        if (auto res = sub_emit(meth.decl, id); !res)
+        if (auto res = sub_emit(meth.decl, func_index); !res)
           return res;
 
-        table.methods.push_back({ name, id, meth.is_public, meth.is_static });
+        classes[index].methods.push_back(
+          { name, id, meth.is_public, meth.is_static });
       }
-
-      classes[id] = table;
 
       return {};
     }
@@ -330,14 +329,16 @@ std::expected<void, Error> IrGen::emit(Expr const &expr) {
     [&](Literal const &e) -> std::expected<void, Error> {
       auto val =
         std::visit(Overloaded{ /* Formatter fix */
-                     [](double x) -> PeaValue { return { PeaNumber{ x } }; },
-                     [](char x) -> PeaValue { return { PeaChar{ x } }; },
-                     [](std::string x) -> PeaValue {
-                       return { PeaString{ std::move(x) } };
+                     [](double x) -> ConstData { return { ConstNumber{ x } }; },
+                     [](char x) -> ConstData { return { ConstChar{ x } }; },
+                     [](std::string x) -> ConstData {
+                       return { ConstString{ std::move(x) } };
                      } },
           e.value);
-      auto c = const_register(val);
-      prog.push_back({ Instruction::LoadConst, c });
+      auto id = const_next++;
+      val.id = id;
+      consts.push_back(std::move(val));
+      prog.push_back({ Instruction::LoadConst, id });
       return {};
     },
     [&](Variable const &e) -> std::expected<void, Error> {
@@ -478,23 +479,10 @@ std::uint16_t IrGen::var_register(std::string const &name) {
   }
 }
 
-std::optional<std::uint16_t> IrGen::var_get(std::string const &name) {
-  if (auto it = variables.find(name); it != variables.end()) {
-    return it->second;
-  } else {
-    return {};
-  }
-}
-
 std::uint16_t IrGen::var_fresh() {
   auto id = var_next++;
   variables.insert({ "$VAR" + std::to_string(id), id });
   return id;
-}
-
-std::uint16_t IrGen::const_register(PeaValue val) {
-  consts.push_back(std::move(val));
-  return static_cast<std::uint16_t>(consts.size() - 1);
 }
 
 std::uint16_t IrGen::label_register(std::string lbl) {
@@ -514,7 +502,8 @@ std::uint16_t IrGen::label_get() {
   return id;
 }
 
-std::expected<void, Error> IrGen::sub_emit(SubDecl const &s, std::uint16_t id) {
+std::expected<void, Error> IrGen::sub_emit(
+  SubDecl const &s, std::size_t index) {
   std::vector<Instruction> main_prog = std::move(prog);
   prog.clear();
 
@@ -544,7 +533,7 @@ std::expected<void, Error> IrGen::sub_emit(SubDecl const &s, std::uint16_t id) {
 
   prog.push_back({ Instruction::Return, 0 });
 
-  func_bodies[id] = std::move(prog);
+  funcs[index].body = std::move(prog);
   prog = std::move(main_prog);
 
   return {};
@@ -634,20 +623,23 @@ void print_instr(std::ostream &os, It &it, ProgramIr const &ir) {
   } break;
   case Instruction::LoadConst: {
     os << "LOAD_CONST " << instr.data << "[";
+    auto val = std::find_if(ir.consts.begin(),
+      ir.consts.end(),
+      [&instr](auto c) { return c.id == instr.data; });
     std::visit(
       [&os](auto const &v) {
         using T = std::decay_t<decltype(v)>;
-        if constexpr (std::is_same_v<T, PeaNumber>)
+        if constexpr (std::is_same_v<T, ConstNumber>)
           os << v.val;
-        else if constexpr (std::is_same_v<T, PeaChar>)
+        else if constexpr (std::is_same_v<T, ConstChar>)
           os << v.val;
-        else if constexpr (std::is_same_v<T, PeaString>)
+        else if constexpr (std::is_same_v<T, ConstString>)
           os << v.val;
-        else if constexpr (std::is_same_v<T, PeaFuncPtr>)
+        else if constexpr (std::is_same_v<T, ConstFuncPtr>)
           os << "func_ptr(" << v.id << ")";
         os << "]\n";
       },
-      ir.consts[instr.data].data);
+      val->data);
   } break;
   case Instruction::Pop: {
     os << "POP\n";
@@ -703,7 +695,7 @@ void print_instr(std::ostream &os, It &it, ProgramIr const &ir) {
     os << ", " << count.data << "\n";
   } break;
   case Instruction::StoreVField: {
-    auto name = ir.class_names[instr.data];
+    auto name = ir.classes[instr.data].name;
     auto fld = *(++it);
     auto fld_name = std::find_if(ir.vars.begin(),
       ir.vars.end(),
@@ -721,11 +713,11 @@ std::ostream &operator<<(std::ostream &os, ProgramIr const &ir) {
     print_instr(os, it, ir);
   }
 
-  if (!ir.func_names.empty()) {
+  if (!ir.funcs.empty()) {
     os << "\n--- Functions ---\n";
-    for (size_t i = 0; i < ir.func_names.size(); ++i) {
-      os << "FUNC " << i << " [" << ir.func_names[i] << "]:\n";
-      for (auto it = ir.func_bodies[i].begin(); it != ir.func_bodies[i].end();
+    for (size_t i = 0; i < ir.funcs.size(); ++i) {
+      os << "FUNC " << i << " [" << ir.funcs[i].name << "]:\n";
+      for (auto it = ir.funcs[i].body.begin(); it != ir.funcs[i].body.end();
         ++it) {
         os << "  ";
         print_instr(os, it, ir);
@@ -733,10 +725,10 @@ std::ostream &operator<<(std::ostream &os, ProgramIr const &ir) {
     }
   }
 
-  if (!ir.class_names.empty()) {
+  if (!ir.classes.empty()) {
     os << "\n--- Classes ---\n";
-    for (std::size_t i = 0; i < ir.class_names.size(); ++i) {
-      os << "CLASS " << i << " [" << ir.class_names[i] << "]:\n";
+    for (std::size_t i = 0; i < ir.classes.size(); ++i) {
+      os << "CLASS " << i << " [" << ir.classes[i].name << "]:\n";
       os << "FIELDS:\n";
       for (auto &field : ir.classes[i].fields) {
         auto name = std::find_if(ir.vars.begin(),
